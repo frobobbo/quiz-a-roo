@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trivia Night — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:   #0a0a3a;
+      --dark:   #16166a;
+      --darker: #0d0d4a;
+      --gold:   #c09a38;
+      --white:  #ffffff;
+      --border: rgba(255,255,255,.12);
+      --panel:  #12123a;
+      --green:  #44bb77;
+      --red:    #cc4444;
+    }
+    html, body { min-height: 100%; background: var(--blue); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    body { padding: 0 0 60px; }
+
+    header {
+      display: flex; align-items: center; gap: 12px; padding: 0 24px;
+      height: 50px; background: #080820; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { font-family: Impact, sans-serif; font-size: 16px; letter-spacing: 3px; color: var(--gold); flex: 1; }
+    .back-btn {
+      background: transparent; border: 1px solid var(--border); border-radius: 6px;
+      color: rgba(255,255,255,.5); padding: 5px 12px; cursor: pointer; font-size: 13px;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .back-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    .page { max-width: 640px; margin: 0 auto; padding: 32px 20px; display: flex; flex-direction: column; gap: 28px; }
+
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .card-header { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .card-header h2 { font-family: Impact, sans-serif; font-size: 14px; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; }
+    .card-body { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* API Key */
+    .api-status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .api-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .api-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .api-dot.missing { background: #888; }
+    .api-preview { font-family: monospace; color: rgba(255,255,255,.45); }
+    .input-row { display: flex; gap: 8px; }
+    .input-row input[type="text"], .input-row input[type="password"] {
+      flex: 1; background: var(--dark); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--white); font-size: 13px; padding: 10px 12px; outline: none; font-family: monospace;
+    }
+    .input-row input:focus { border-color: var(--gold); }
+    .btn-save {
+      background: var(--gold); color: #000; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 700; padding: 10px 18px; cursor: pointer; white-space: nowrap;
+    }
+    .btn-save:hover { filter: brightness(1.1); }
+    .btn-save:disabled { opacity: .5; cursor: default; filter: none; }
+    .save-feedback { font-size: 12px; min-height: 16px; }
+    .save-feedback.ok   { color: var(--green); }
+    .save-feedback.err  { color: #ff6b6b; }
+
+    /* Game defaults */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .setting-row { display: flex; flex-direction: column; gap: 6px; }
+    .setting-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.4); }
+    .setting-val { font-size: 13px; color: var(--gold); font-family: Impact, sans-serif; letter-spacing: 1px; }
+    input[type="range"] { width: 100%; accent-color: var(--gold); cursor: pointer; }
+    .tog-list { display: flex; flex-direction: column; gap: 10px; }
+    .tog-row { display: flex; align-items: center; gap: 10px; }
+    .tog { position: relative; display: inline-block; width: 38px; height: 20px; flex-shrink: 0; }
+    .tog input { opacity: 0; width: 0; height: 0; }
+    .tog-track { position: absolute; inset: 0; background: rgba(255,255,255,.15); border-radius: 20px; cursor: pointer; transition: background .2s; }
+    .tog-track::before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: transform .2s; }
+    .tog input:checked + .tog-track { background: var(--gold); }
+    .tog input:checked + .tog-track::before { transform: translateX(18px); }
+    .settings-save-row { display: flex; align-items: center; gap: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
+
+    /* Appearance */
+    .tp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .tp-swatch { border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color .15s, transform .1s; }
+    .tp-swatch:hover { transform: scale(1.04); border-color: rgba(255,255,255,.5); }
+    .tp-swatch.active { border-color: #fff; }
+    .sw-bg { height: 36px; }
+    .sw-accent { height: 7px; }
+    .sw-label { font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: rgba(255,255,255,.5); text-align: center; padding: 4px 2px; background: rgba(0,0,0,.5); }
+    .tp-swatch.active .sw-label { color: #fff; }
+    .tp-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+    .tp-custom-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.35); margin-bottom: 10px; }
+    .tp-color-row { display: flex; gap: 12px; }
+    .tp-color-item { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; }
+    .tp-color-item label { font-size: 10px; color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: .5px; }
+    .tp-color-item input[type="color"] { width: 52px; height: 34px; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; cursor: pointer; background: transparent; padding: 2px; }
+    .btn-apply-custom {
+      margin-top: 12px; width: 100%; padding: 9px; background: var(--gold); color: #000; border: none;
+      border-radius: 7px; font-size: 12px; font-weight: 700; letter-spacing: 1px; cursor: pointer; text-transform: uppercase;
+    }
+    .btn-apply-custom:hover { filter: brightness(1.1); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>SETTINGS</h1>
+  <a href="/host" class="back-btn">← Back to Host</a>
+</header>
+
+<div class="page">
+
+  <!-- API Keys -->
+  <div class="card">
+    <div class="card-header">
+      <h2>API Keys</h2>
+    </div>
+    <div class="card-body">
+      <div class="api-status">
+        <div class="api-dot missing" id="api-dot"></div>
+        <span id="api-status-text">Checking…</span>
+        <span class="api-preview" id="api-preview"></span>
+      </div>
+      <div>
+        <div class="setting-label" style="margin-bottom:8px">Anthropic API Key</div>
+        <div class="input-row">
+          <input type="password" id="api-key-input" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false">
+          <button class="btn-save" id="api-key-save">Save</button>
+        </div>
+        <div class="save-feedback" id="api-key-feedback" style="margin-top:8px"></div>
+      </div>
+      <div style="font-size:12px;color:rgba(255,255,255,.35);line-height:1.6">
+        Required for AI question generation. Get a key at
+        <a href="https://console.anthropic.com" target="_blank" style="color:var(--gold)">console.anthropic.com</a>.
+        Stored in <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px">config.json</code> on the server.
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Defaults -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Game Defaults</h2>
+    </div>
+    <div class="card-body">
+      <div class="settings-grid">
+        <div class="setting-row">
+          <span class="setting-label">Buzz window <span class="setting-val" id="buzz-val">30s</span></span>
+          <input type="range" id="buzz-range" min="10" max="60" step="5" value="30">
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Answer time <span class="setting-val" id="answer-val">10s</span></span>
+          <input type="range" id="answer-range" min="5" max="30" step="5" value="10">
+        </div>
+      </div>
+      <div class="tog-list">
+        <div class="tog-row">
+          <label class="tog" title="Wrong answer locks player out for the current question">
+            <input type="checkbox" id="lockout-toggle">
+            <span class="tog-track"></span>
+          </label>
+          <span class="setting-label">Wrong answer lockout</span>
+        </div>
+        <div class="tog-row">
+          <label class="tog" title="Randomly assign Daily Doubles each game">
+            <input type="checkbox" id="dd-toggle" checked>
+            <span class="tog-track"></span>
+          </label>
+          <span class="setting-label">Daily Doubles</span>
+        </div>
+        <div class="tog-row">
+          <label class="tog" title="Players form teams and compete by team score">
+            <input type="checkbox" id="team-mode-toggle">
+            <span class="tog-track"></span>
+          </label>
+          <span class="setting-label">Team Mode</span>
+        </div>
+      </div>
+      <div class="settings-save-row">
+        <button class="btn-save" id="game-defaults-save">Save Defaults</button>
+        <div class="save-feedback" id="game-defaults-feedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Appearance -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Appearance</h2>
+    </div>
+    <div class="card-body">
+      <div class="setting-label" style="margin-bottom:10px">Color Theme</div>
+      <div class="tp-grid" id="tp-grid"></div>
+      <hr class="tp-divider" style="margin-top:14px">
+      <div class="tp-custom-title" style="margin-top:10px">Custom Theme</div>
+      <div class="tp-color-row">
+        <div class="tp-color-item">
+          <label for="tp-bg">Background</label>
+          <input type="color" id="tp-bg" value="#0a0a3a">
+        </div>
+        <div class="tp-color-item">
+          <label for="tp-cards">Cards</label>
+          <input type="color" id="tp-cards" value="#16166a">
+        </div>
+        <div class="tp-color-item">
+          <label for="tp-accent">Accent</label>
+          <input type="color" id="tp-accent" value="#c09a38">
+        </div>
+      </div>
+      <button class="btn-apply-custom" id="apply-custom-btn">Apply Custom Theme</button>
+      <div class="save-feedback" id="theme-feedback" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  socket.emit('join-host');
+
+  const THEMES = [
+    { id: 'classic',  label: 'Classic',  main: '#0a0a3a', accent: '#c09a38' },
+    { id: 'midnight', label: 'Midnight', main: '#05050f', accent: '#4488ff' },
+    { id: 'retro',    label: 'Retro',    main: '#1a0a00', accent: '#ff8c00' },
+    { id: 'forest',   label: 'Forest',   main: '#051a05', accent: '#44cc66' },
+    { id: 'crimson',  label: 'Crimson',  main: '#1a0505', accent: '#cc3333' },
+    { id: 'ocean',    label: 'Ocean',    main: '#052028', accent: '#44c4b8' },
+    { id: 'violet',   label: 'Violet',   main: '#1a0838', accent: '#d4a830' },
+  ];
+
+  const CUSTOM_VARS = ['--blue','--dark','--darker','--used','--gold'];
+
+  function darkenHex(hex, pct) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return '#' + [r,g,b].map(c => Math.max(0,Math.round(c*(1-pct))).toString(16).padStart(2,'0')).join('');
+  }
+
+  let activeTheme = 'classic';
+
+  function buildThemeGrid(selected) {
+    const grid = document.getElementById('tp-grid');
+    grid.innerHTML = THEMES.map(t => `
+      <div class="tp-swatch${t.id === selected ? ' active' : ''}" data-id="${t.id}">
+        <div class="sw-bg" style="background:${t.main}"></div>
+        <div class="sw-accent" style="background:${t.accent}"></div>
+        <div class="sw-label">${t.label}</div>
+      </div>
+    `).join('');
+    grid.querySelectorAll('.tp-swatch').forEach(sw => {
+      sw.addEventListener('click', () => selectPresetTheme(sw.dataset.id));
+    });
+  }
+
+  async function selectPresetTheme(id) {
+    activeTheme = id;
+    document.querySelectorAll('.tp-swatch').forEach(sw => sw.classList.toggle('active', sw.dataset.id === id));
+    socket.emit('set-theme', { theme: id });
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultTheme: id, customThemeVars: null }),
+    });
+    showFeedback('theme-feedback', res.ok ? 'Theme saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
+  }
+
+  document.getElementById('apply-custom-btn').addEventListener('click', async () => {
+    const bg     = document.getElementById('tp-bg').value;
+    const cards  = document.getElementById('tp-cards').value;
+    const accent = document.getElementById('tp-accent').value;
+    const vars = {
+      '--blue':   bg,
+      '--dark':   cards,
+      '--darker': darkenHex(cards, 0.3),
+      '--used':   darkenHex(bg, 0.5),
+      '--gold':   accent,
+    };
+    socket.emit('set-custom-theme', { vars });
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultTheme: 'custom', customThemeVars: vars }),
+    });
+    document.querySelectorAll('.tp-swatch').forEach(sw => sw.classList.remove('active'));
+    showFeedback('theme-feedback', res.ok ? 'Custom theme saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
+  });
+
+  // API key save
+  document.getElementById('api-key-save').addEventListener('click', async () => {
+    const key = document.getElementById('api-key-input').value.trim();
+    const btn = document.getElementById('api-key-save');
+    btn.disabled = true;
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: key }),
+    });
+    btn.disabled = false;
+    if (res.ok) {
+      document.getElementById('api-key-input').value = '';
+      showFeedback('api-key-feedback', 'API key saved. AI generation is now active.', 'ok');
+      document.getElementById('api-dot').className = 'api-dot ok';
+      document.getElementById('api-status-text').textContent = 'Configured';
+    } else {
+      showFeedback('api-key-feedback', 'Failed to save.', 'err');
+    }
+  });
+
+  // Game defaults save
+  document.getElementById('game-defaults-save').addEventListener('click', async () => {
+    const gameDefaults = {
+      buzzTime:            +document.getElementById('buzz-range').value,
+      answerTime:          +document.getElementById('answer-range').value,
+      lockoutEnabled:      document.getElementById('lockout-toggle').checked,
+      dailyDoublesEnabled: document.getElementById('dd-toggle').checked,
+      teamMode:            document.getElementById('team-mode-toggle').checked,
+    };
+    // Also update current session if still in lobby
+    socket.emit('update-settings', gameDefaults);
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameDefaults }),
+    });
+    showFeedback('game-defaults-feedback', res.ok ? 'Defaults saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
+  });
+
+  // Slider labels
+  document.getElementById('buzz-range').addEventListener('input', function() {
+    document.getElementById('buzz-val').textContent = this.value + 's';
+  });
+  document.getElementById('answer-range').addEventListener('input', function() {
+    document.getElementById('answer-val').textContent = this.value + 's';
+  });
+
+  function showFeedback(id, msg, type) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'save-feedback ' + type;
+    setTimeout(() => { el.textContent = ''; el.className = 'save-feedback'; }, 3000);
+  }
+
+  // Load current settings on page load
+  async function loadSettings() {
+    const res = await fetch('/api/app-settings');
+    if (!res.ok) return;
+    const s = await res.json();
+
+    // API key status
+    document.getElementById('api-dot').className = 'api-dot ' + (s.apiKeyConfigured ? 'ok' : 'missing');
+    document.getElementById('api-status-text').textContent = s.apiKeyConfigured ? 'Configured' : 'Not configured';
+    if (s.apiKeyPreview) document.getElementById('api-preview').textContent = s.apiKeyPreview;
+
+    // Game defaults
+    const d = s.gameDefaults || {};
+    if (d.buzzTime)   { document.getElementById('buzz-range').value = d.buzzTime; document.getElementById('buzz-val').textContent = d.buzzTime + 's'; }
+    if (d.answerTime) { document.getElementById('answer-range').value = d.answerTime; document.getElementById('answer-val').textContent = d.answerTime + 's'; }
+    document.getElementById('lockout-toggle').checked  = !!d.lockoutEnabled;
+    document.getElementById('dd-toggle').checked       = d.dailyDoublesEnabled !== false;
+    document.getElementById('team-mode-toggle').checked = !!d.teamMode;
+
+    // Appearance
+    buildThemeGrid(s.defaultTheme || 'classic');
+    if (s.customThemeVars) {
+      if (s.customThemeVars['--blue'])  document.getElementById('tp-bg').value    = s.customThemeVars['--blue'];
+      if (s.customThemeVars['--dark'])  document.getElementById('tp-cards').value = s.customThemeVars['--dark'];
+      if (s.customThemeVars['--gold'])  document.getElementById('tp-accent').value = s.customThemeVars['--gold'];
+    }
+  }
+
+  loadSettings();
+</script>
+</body>
+</html>

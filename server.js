@@ -18,12 +18,13 @@ function loadConfig() {
 }
 const config = loadConfig();
 const https = require('https');
-const apiKey = config.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
-const anthropic = apiKey ? new Anthropic({ apiKey, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
+let apiKey = config.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
+let anthropic = apiKey ? new Anthropic({ apiKey, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
 
 const PORT = process.env.PORT || 3000;
 const LIBRARY_FILE = path.join(__dirname, 'library.json');
 const HISTORY_FILE = path.join(__dirname, 'history.json');
+const APP_SETTINGS_FILE = path.join(__dirname, 'app-settings.json');
 
 // ── History ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,22 @@ function saveHistory() {
 }
 
 let history = loadHistory();
+
+// ── App settings (persistent defaults) ───────────────────────────────────────
+
+function loadAppSettings() {
+  try {
+    if (fs.existsSync(APP_SETTINGS_FILE)) return JSON.parse(fs.readFileSync(APP_SETTINGS_FILE, 'utf8'));
+  } catch (e) { console.warn('Could not read app-settings.json:', e.message); }
+  return { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
+}
+
+function saveAppSettings() {
+  try { fs.writeFileSync(APP_SETTINGS_FILE, JSON.stringify(appSettings, null, 2)); }
+  catch (e) { console.error('Failed to save app-settings.json:', e.message); }
+}
+
+let appSettings = loadAppSettings();
 
 function recordGameResult() {
   const isTeamGame = game.settings.teamMode && game.teams.length > 0;
@@ -76,6 +93,7 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 app.get('/board',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'board.html')));
 app.get('/player', (req, res) => res.sendFile(path.join(__dirname, 'public', 'player.html')));
@@ -94,6 +112,38 @@ function requireHost(req, res, next) {
 }
 
 app.get('/api/history', requireHost, (req, res) => res.json(history));
+
+app.get('/settings', requireHost, (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
+
+app.get('/api/app-settings', requireHost, (req, res) => {
+  const cfg = loadConfig();
+  const key = cfg.ANTHROPIC_API_KEY || '';
+  res.json({
+    apiKeyConfigured: !!key,
+    apiKeyPreview: key ? key.slice(0, 14) + '…' + key.slice(-4) : '',
+    gameDefaults: appSettings.gameDefaults || {},
+    defaultTheme: appSettings.defaultTheme || 'classic',
+    customThemeVars: appSettings.customThemeVars || null,
+  });
+});
+
+app.post('/api/app-settings', requireHost, (req, res) => {
+  const { apiKey: newKey, gameDefaults, defaultTheme, customThemeVars } = req.body;
+  if (newKey !== undefined) {
+    const trimmed = (newKey || '').trim();
+    const cfg = loadConfig();
+    cfg.ANTHROPIC_API_KEY = trimmed;
+    try { fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(cfg, null, 2)); }
+    catch (e) { return res.status(500).json({ error: 'Failed to save API key.' }); }
+    apiKey = trimmed;
+    anthropic = trimmed ? new Anthropic({ apiKey: trimmed, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
+  }
+  if (gameDefaults && typeof gameDefaults === 'object') appSettings.gameDefaults = { ...appSettings.gameDefaults, ...gameDefaults };
+  if (defaultTheme !== undefined) appSettings.defaultTheme = defaultTheme;
+  if (customThemeVars !== undefined) appSettings.customThemeVars = customThemeVars;
+  saveAppSettings();
+  res.json({ ok: true });
+});
 
 app.post('/host-auth', (req, res) => {
   if ((req.body.pin || '').trim() === HOST_PIN) {
@@ -137,9 +187,10 @@ function broadcastLibrary() {
 const VALID_THEMES = ['classic','midnight','retro','forest','crimson','ocean','violet'];
 
 function freshState() {
+  const d = appSettings.gameDefaults || {};
   return {
     phase: 'lobby',
-    theme: 'classic',
+    theme: appSettings.defaultTheme || 'classic',
     round: 1,
     players: [],
     currentPlayerIndex: 0,
@@ -156,18 +207,18 @@ function freshState() {
     timerType: null,
     buzzOpen: false,
     buzzOpenAt: null,
-    // Daily double
     dailyDoubleWager: null,
-    // Wrong answer lockout
     lockedOutIds: [],
-    // Tiebreaker
     tiebreakerQuestion: null,
     tiebreakerPlayers: [],
-    // Settings (host-configurable before game start)
-    settings: { buzzTime: 30, answerTime: 10, lockoutEnabled: false, dailyDoublesEnabled: true, teamMode: false },
-    // Custom theme CSS vars (null = use named theme)
-    customThemeVars: null,
-    // Teams (only used when settings.teamMode is true)
+    settings: {
+      buzzTime:            d.buzzTime            || 30,
+      answerTime:          d.answerTime          || 10,
+      lockoutEnabled:      !!d.lockoutEnabled,
+      dailyDoublesEnabled: d.dailyDoublesEnabled !== false,
+      teamMode:            !!d.teamMode,
+    },
+    customThemeVars: appSettings.customThemeVars || null,
     teams: [],
   };
 }
