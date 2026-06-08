@@ -441,6 +441,7 @@
 <div id="game">
   <div id="scores"></div>
   <div id="board-wrap">
+    <div id="page-indicator" style="display:none;text-align:center;font-family:Impact,sans-serif;font-size:clamp(13px,1.4vw,20px);letter-spacing:3px;color:var(--gold);opacity:.7;padding:6px 0 2px"></div>
     <div id="board-grid"></div>
   </div>
   <div id="turn-bar"></div>
@@ -640,16 +641,28 @@
       `).join('');
     }
 
-    // Grid
+    // Grid — filter to current page
+    const currentPage = state.currentPage || 1;
+    const allPages = [...new Set(state.categories.map(c => c.page || 1))].sort();
+    const pageCats = state.categories.filter(c => (c.page || 1) === currentPage);
+
+    const pageIndicator = document.getElementById('page-indicator');
+    if (allPages.length > 1) {
+      pageIndicator.style.display = 'block';
+      pageIndicator.textContent = `PAGE ${currentPage} OF ${allPages.length}`;
+    } else {
+      pageIndicator.style.display = 'none';
+    }
+
     const grid = document.getElementById('board-grid');
-    const cols = state.categories.length;
-    const rows = state.categories[0]?.questions.length ?? 5;
+    const cols = pageCats.length;
+    const rows = pageCats[0]?.questions.length ?? 5;
     grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     grid.style.gridTemplateRows = `auto repeat(${rows}, 1fr)`;
     grid.innerHTML = '';
 
     // Category headers
-    state.categories.forEach(cat => {
+    pageCats.forEach(cat => {
       const el = document.createElement('div');
       el.className = 'cat-header';
       el.textContent = cat.name;
@@ -658,7 +671,7 @@
 
     // Value tiles
     for (let row = 0; row < rows; row++) {
-      state.categories.forEach(cat => {
+      pageCats.forEach(cat => {
         const q = cat.questions[row];
         const el = document.createElement('div');
         el.className = `q-tile${q.used ? ' used' : ''}`;

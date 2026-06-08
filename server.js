@@ -219,6 +219,7 @@ function freshState() {
       teamMode:            !!d.teamMode,
     },
     customThemeVars: appSettings.customThemeVars || null,
+    currentPage: 1,
     teams: [],
   };
 }
@@ -301,8 +302,10 @@ function publicState() {
     currentPlayerIndex: game.currentPlayerIndex,
     categories: game.categories.map(cat => ({
       name: cat.name,
+      page: cat.page || 1,
       questions: cat.questions.map(({ value, used }) => ({ value, used })),
     })),
+    currentPage: game.currentPage || 1,
     currentQuestion: game.currentQuestion ? {
       categoryName: game.currentQuestion.categoryName,
       value: game.currentQuestion.value,
@@ -820,7 +823,26 @@ JSON format (return exactly this structure, no extra text):
     if (game.phase !== 'lobby') return;
     if (![1, 2, 'final'].includes(round)) return;
     const cat = lib.categories.find(c => c.id === id);
-    if (cat) { cat.round = round; saveLibrary(); broadcastLibrary(); }
+    if (cat) {
+      cat.round = round;
+      if (round === 'final') cat.page = 1;
+      saveLibrary(); broadcastLibrary();
+    }
+  });
+
+  socket.on('set-category-page', ({ id, page }) => {
+    if (game.phase !== 'lobby') return;
+    if (![1, 2].includes(page)) return;
+    const cat = lib.categories.find(c => c.id === id);
+    if (cat && cat.round !== 'final') { cat.page = page; saveLibrary(); broadcastLibrary(); }
+  });
+
+  socket.on('switch-page', ({ page }) => {
+    if (game.phase !== 'selecting') return;
+    const pages = [...new Set(game.categories.map(c => c.page || 1))].sort();
+    if (!pages.includes(page)) return;
+    game.currentPage = page;
+    broadcast();
   });
 
   socket.on('start-game', () => {
@@ -877,6 +899,7 @@ JSON format (return exactly this structure, no extra text):
     game.categories = JSON.parse(JSON.stringify(game.round2Categories));
     game.round2Categories = [];
     game.round = 2;
+    game.currentPage = 1;
     assignDailyDoubles(game.categories, 2);
     game.phase = 'selecting';
     if (game.settings.teamMode && game.teams.length > 0) {

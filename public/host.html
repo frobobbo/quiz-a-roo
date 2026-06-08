@@ -302,12 +302,17 @@
     #tiebreaker-section { display: none; }
 
     /* ── ROUND SELECTOR ── */
-    .round-pills { display: flex; gap: 3px; flex-shrink: 0; }
+    .round-pills { display: flex; gap: 3px; flex-shrink: 0; flex-wrap: wrap; }
     .round-pill { background: transparent; border: 1px solid #334; border-radius: 4px; color: rgba(255,255,255,.3); font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 2px 6px; cursor: pointer; transition: background .12s, color .12s, border-color .12s; white-space: nowrap; }
     .round-pill:hover { border-color: #556; color: rgba(255,255,255,.6); }
     .round-pill.active-r1 { background: #1a3a6a; border-color: #3a5aaa; color: #8ab0ff; }
     .round-pill.active-r2 { background: #3a1a6a; border-color: #6a3aaa; color: #c080ff; }
     .round-pill.active-fj { background: #5a3a0a; border-color: #c09a38; color: var(--gold); }
+    .page-pill { background: transparent; border: 1px solid #334; border-radius: 4px; color: rgba(255,255,255,.3); font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 2px 6px; cursor: pointer; transition: background .12s, color .12s, border-color .12s; white-space: nowrap; }
+    .page-pill:hover { border-color: #556; color: rgba(255,255,255,.6); }
+    .page-pill.active-p1 { background: #0e3a2a; border-color: #2a8a5a; color: #60cc99; }
+    .page-pill.active-p2 { background: #3a2a0e; border-color: #8a6a2a; color: #ccaa60; }
+    .page-pill-sep { width: 1px; background: #334; margin: 0 2px; flex-shrink: 0; }
 
     /* ── ROUND-OVER / FINAL SECTIONS ── */
     #round-over-section, #final-wager-section, #final-question-section { display: none; }
@@ -478,6 +483,16 @@
             <span class="val masked" id="dd-q-answer"></span>
             <button class="q-reveal-btn" id="dd-reveal-btn">👁 Reveal answer</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Page navigation (selecting phase, multi-page games) -->
+      <div id="page-nav-section" style="display:none;margin-bottom:16px">
+        <div class="section-title" style="margin-bottom:8px">Board Page</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-gray btn-sm" id="page-prev-btn">◀ Prev</button>
+          <span id="page-nav-label" style="font-family:Impact,sans-serif;font-size:15px;letter-spacing:2px;color:var(--gold)">PAGE 1 OF 2</span>
+          <button class="btn btn-gray btn-sm" id="page-next-btn">Next ▶</button>
         </div>
       </div>
 
@@ -941,6 +956,22 @@
     document.getElementById('daily-double-section').style.display    = phase === 'daily-double'    ? 'block' : 'none';
     document.getElementById('tiebreaker-section').style.display      = phase === 'tiebreaker'      ? 'block' : 'none';
 
+    // Page navigation — only show during selecting when multiple pages exist
+    if (phase === 'selecting' && gameState.categories) {
+      const pages = [...new Set(gameState.categories.map(c => c.page || 1))].sort();
+      const cur   = gameState.currentPage || 1;
+      if (pages.length > 1) {
+        document.getElementById('page-nav-section').style.display = 'block';
+        document.getElementById('page-nav-label').textContent = `PAGE ${cur} OF ${pages.length}`;
+        document.getElementById('page-prev-btn').disabled = cur <= pages[0];
+        document.getElementById('page-next-btn').disabled = cur >= pages[pages.length - 1];
+      } else {
+        document.getElementById('page-nav-section').style.display = 'none';
+      }
+    } else {
+      document.getElementById('page-nav-section').style.display = 'none';
+    }
+
     renderPlayers();
 
     if (phase === 'question') {
@@ -1203,6 +1234,8 @@
     card.dataset.id = cat.id;
 
     const catRound = cat.round || 1;
+    const catPage  = cat.page  || 1;
+    const showPagePills = catRound !== 'final';
     card.innerHTML = `
       <div class="lib-cat-header">
         <input type="checkbox" class="cat-sel-check" title="Select for deletion">
@@ -1218,6 +1251,11 @@
           <button class="round-pill${catRound === 1 ? ' active-r1' : ''}" data-id="${cat.id}" data-round="1" title="Round 1">R1</button>
           <button class="round-pill${catRound === 2 ? ' active-r2' : ''}" data-id="${cat.id}" data-round="2" title="Round 2">R2</button>
           <button class="round-pill${catRound === 'final' ? ' active-fj' : ''}" data-id="${cat.id}" data-round="final" title="Final Jeopardy">FJ</button>
+          ${showPagePills ? `
+          <div class="page-pill-sep"></div>
+          <button class="page-pill${catPage === 1 ? ' active-p1' : ''}" data-id="${cat.id}" data-page="1" title="Board Page 1">P1</button>
+          <button class="page-pill${catPage === 2 ? ' active-p2' : ''}" data-id="${cat.id}" data-page="2" title="Board Page 2">P2</button>
+          ` : ''}
         </div>
         <button class="btn-icon expand-btn" data-id="${cat.id}" title="Edit questions">
           <span class="chevron ${isOpen ? 'open' : ''}">▶</span>
@@ -1331,6 +1369,14 @@
         e.stopPropagation();
         const r = pill.dataset.round === '1' ? 1 : pill.dataset.round === '2' ? 2 : 'final';
         socket.emit('set-category-round', { id: cat.id, round: r });
+      });
+    });
+
+    // Page pills
+    card.querySelectorAll('.page-pill').forEach(pill => {
+      pill.addEventListener('click', e => {
+        e.stopPropagation();
+        socket.emit('set-category-page', { id: cat.id, page: +pill.dataset.page });
       });
     });
 
@@ -1616,6 +1662,21 @@
     });
     return results;
   }
+
+  document.getElementById('page-prev-btn').addEventListener('click', () => {
+    if (!gameState?.categories) return;
+    const pages = [...new Set(gameState.categories.map(c => c.page || 1))].sort();
+    const cur = gameState.currentPage || 1;
+    const idx = pages.indexOf(cur);
+    if (idx > 0) socket.emit('switch-page', { page: pages[idx - 1] });
+  });
+  document.getElementById('page-next-btn').addEventListener('click', () => {
+    if (!gameState?.categories) return;
+    const pages = [...new Set(gameState.categories.map(c => c.page || 1))].sort();
+    const cur = gameState.currentPage || 1;
+    const idx = pages.indexOf(cur);
+    if (idx < pages.length - 1) socket.emit('switch-page', { page: pages[idx + 1] });
+  });
 
   document.getElementById('start-round2-btn').addEventListener('click', () => socket.emit('start-round2'));
   document.getElementById('force-reveal-btn').addEventListener('click', () => socket.emit('reveal-final-question'));
