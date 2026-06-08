@@ -539,10 +539,10 @@
   let timerInterval = null;
   let activeTimerEndsAt = null;
   let lastTTSKey = null;
-  let ttsAudio   = null;
+  let ttsSource  = null;
 
   function stopTTS() {
-    if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; ttsAudio = null; }
+    if (ttsSource) { try { ttsSource.stop(); } catch(e) {} ttsSource = null; }
   }
 
   function speakQuestion(q) {
@@ -556,14 +556,20 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     }).then(res => {
-      if (!res.ok || res.status === 204) return null;
-      return res.blob();
-    }).then(blob => {
-      if (!blob) { socket.emit('tts-done'); return; }
-      const url = URL.createObjectURL(blob);
-      ttsAudio = new Audio(url);
-      ttsAudio.play().catch(() => { socket.emit('tts-done'); });
-      ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio = null; socket.emit('tts-done'); };
+      if (!res.ok || res.status === 204) { socket.emit('tts-done'); return null; }
+      return res.arrayBuffer();
+    }).then(buffer => {
+      if (!buffer) return;
+      const ctx = getAudioCtx();
+      // Resume handles suspended state (browser autoplay policy)
+      return ctx.resume().then(() => ctx.decodeAudioData(buffer)).then(audioBuffer => {
+        const src = ctx.createBufferSource();
+        src.buffer = audioBuffer;
+        src.connect(ctx.destination);
+        ttsSource = src;
+        src.start();
+        src.onended = () => { ttsSource = null; socket.emit('tts-done'); };
+      });
     }).catch(() => { socket.emit('tts-done'); });
   }
 
