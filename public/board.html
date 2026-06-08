@@ -643,13 +643,14 @@
 
     // Grid — filter to current page
     const currentPage = state.currentPage || 1;
-    const allPages = [...new Set(state.categories.map(c => c.page || 1))].sort();
+    const allPagesData = state.pages || [{ id: 1, name: 'Page 1' }];
     const pageCats = state.categories.filter(c => (c.page || 1) === currentPage);
 
     const pageIndicator = document.getElementById('page-indicator');
-    if (allPages.length > 1) {
+    if (allPagesData.length > 1) {
+      const pageName = allPagesData.find(p => p.id === currentPage)?.name || `Page ${currentPage}`;
       pageIndicator.style.display = 'block';
-      pageIndicator.textContent = `PAGE ${currentPage} OF ${allPages.length}`;
+      pageIndicator.textContent = pageName.toUpperCase();
     } else {
       pageIndicator.style.display = 'none';
     }

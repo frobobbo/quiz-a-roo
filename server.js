@@ -173,13 +173,14 @@ function saveLibrary() {
 }
 
 let lib = loadLibrary();
+if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
 
 function generateToken() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
 }
 
 function broadcastLibrary() {
-  io.to('host').emit('library-state', { categories: lib.categories, activeIds: lib.activeIds });
+  io.to('host').emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages });
 }
 
 // ── Game state ────────────────────────────────────────────────────────────────
@@ -220,6 +221,7 @@ function freshState() {
     },
     customThemeVars: appSettings.customThemeVars || null,
     currentPage: 1,
+    pages: [{ id: 1, name: 'Page 1' }],
     teams: [],
   };
 }
@@ -306,6 +308,7 @@ function publicState() {
       questions: cat.questions.map(({ value, used }) => ({ value, used })),
     })),
     currentPage: game.currentPage || 1,
+    pages: game.pages || [{ id: 1, name: 'Page 1' }],
     currentQuestion: game.currentQuestion ? {
       categoryName: game.currentQuestion.categoryName,
       value: game.currentQuestion.value,
@@ -490,7 +493,7 @@ io.on('connection', socket => {
   socket.on('join-host', () => {
     socket.join('host');
     socket.emit('host-state', hostState());
-    socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds });
+    socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages });
     socket.emit('player-url', { url: playerUrl(), qr: qrDataUrl, pin: HOST_PIN });
   });
 
@@ -832,15 +835,37 @@ JSON format (return exactly this structure, no extra text):
 
   socket.on('set-category-page', ({ id, page }) => {
     if (game.phase !== 'lobby') return;
-    if (![1, 2].includes(page)) return;
     const cat = lib.categories.find(c => c.id === id);
-    if (cat && cat.round !== 'final') { cat.page = page; saveLibrary(); broadcastLibrary(); }
+    const pageExists = lib.pages.some(p => p.id === page);
+    if (cat && cat.round !== 'final' && pageExists) { cat.page = page; saveLibrary(); broadcastLibrary(); }
+  });
+
+  socket.on('add-page', () => {
+    if (game.phase !== 'lobby') return;
+    const maxId = lib.pages.reduce((m, p) => Math.max(m, p.id), 0);
+    const id = maxId + 1;
+    lib.pages.push({ id, name: `Page ${id}` });
+    saveLibrary(); broadcastLibrary();
+  });
+
+  socket.on('rename-page', ({ id, name }) => {
+    if (game.phase !== 'lobby') return;
+    const p = lib.pages.find(p => p.id === id);
+    if (p) { p.name = (name || '').trim().slice(0, 40) || p.name; saveLibrary(); broadcastLibrary(); }
+  });
+
+  socket.on('delete-page', ({ id }) => {
+    if (game.phase !== 'lobby') return;
+    if (lib.pages.length <= 1) return;
+    lib.pages = lib.pages.filter(p => p.id !== id);
+    const fallback = lib.pages[0].id;
+    lib.categories.forEach(cat => { if ((cat.page || 1) === id) cat.page = fallback; });
+    saveLibrary(); broadcastLibrary();
   });
 
   socket.on('switch-page', ({ page }) => {
     if (game.phase !== 'selecting') return;
-    const pages = [...new Set(game.categories.map(c => c.page || 1))].sort();
-    if (!pages.includes(page)) return;
+    if (!game.pages?.some(p => p.id === page)) return;
     game.currentPage = page;
     broadcast();
   });
@@ -871,6 +896,7 @@ JSON format (return exactly this structure, no extra text):
     }
     game.categories = JSON.parse(JSON.stringify(round1));
     game.round2Categories = JSON.parse(JSON.stringify(round2));
+    game.pages = JSON.parse(JSON.stringify(lib.pages));
     game.round = 1;
     assignDailyDoubles(game.categories, 1);
     if (finals.length > 0) {
@@ -899,7 +925,7 @@ JSON format (return exactly this structure, no extra text):
     game.categories = JSON.parse(JSON.stringify(game.round2Categories));
     game.round2Categories = [];
     game.round = 2;
-    game.currentPage = 1;
+    game.currentPage = game.pages?.[0]?.id || 1;
     assignDailyDoubles(game.categories, 2);
     game.phase = 'selecting';
     if (game.settings.teamMode && game.teams.length > 0) {

@@ -308,11 +308,22 @@
     .round-pill.active-r1 { background: #1a3a6a; border-color: #3a5aaa; color: #8ab0ff; }
     .round-pill.active-r2 { background: #3a1a6a; border-color: #6a3aaa; color: #c080ff; }
     .round-pill.active-fj { background: #5a3a0a; border-color: #c09a38; color: var(--gold); }
-    .page-pill { background: transparent; border: 1px solid #334; border-radius: 4px; color: rgba(255,255,255,.3); font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 2px 6px; cursor: pointer; transition: background .12s, color .12s, border-color .12s; white-space: nowrap; }
-    .page-pill:hover { border-color: #556; color: rgba(255,255,255,.6); }
-    .page-pill.active-p1 { background: #0e3a2a; border-color: #2a8a5a; color: #60cc99; }
-    .page-pill.active-p2 { background: #3a2a0e; border-color: #8a6a2a; color: #ccaa60; }
-    .page-pill-sep { width: 1px; background: #334; margin: 0 2px; flex-shrink: 0; }
+    /* Page tabs (library) */
+    #page-tabs-bar { width: 100%; border-top: 1px solid #2a2a3a; padding-top: 8px; margin-top: 4px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .page-tab { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: 1px solid #334; border-radius: 6px; color: rgba(255,255,255,.4); font-size: 11px; font-weight: 700; letter-spacing: .5px; padding: 3px 10px; cursor: pointer; transition: all .12s; white-space: nowrap; }
+    .page-tab:hover { border-color: #556; color: rgba(255,255,255,.7); }
+    .page-tab.pg-active { background: #1a3a6a; border-color: #3a6aaa; color: #a0c0ff; }
+    .page-tab-del { background: none; border: none; color: rgba(255,255,255,.25); cursor: pointer; padding: 0; font-size: 14px; line-height: 1; margin-left: 1px; }
+    .page-tab-del:hover { color: #cc4444; }
+    .page-tab-add { background: transparent; border: 1px dashed #334; border-radius: 6px; color: rgba(255,255,255,.3); font-size: 11px; font-weight: 700; padding: 3px 10px; cursor: pointer; transition: all .12s; }
+    .page-tab-add:hover { border-color: #667; color: rgba(255,255,255,.6); }
+    /* Page select on category card */
+    .page-select { background: #161620; border: 1px solid #334; border-radius: 4px; color: rgba(255,255,255,.5); font-size: 10px; padding: 2px 4px; cursor: pointer; }
+    .page-select:focus { outline: none; border-color: #667; }
+    /* Game phase page tabs */
+    .game-page-btn { background: transparent; border: 1px solid #334; border-radius: 6px; color: rgba(255,255,255,.4); font-size: 12px; font-weight: 700; padding: 5px 14px; cursor: pointer; transition: all .12s; white-space: nowrap; }
+    .game-page-btn:hover { border-color: #556; color: rgba(255,255,255,.7); }
+    .game-page-btn.gp-active { background: #1a3a6a; border-color: #3a6aaa; color: #a0c0ff; }
 
     /* ── ROUND-OVER / FINAL SECTIONS ── */
     #round-over-section, #final-wager-section, #final-question-section { display: none; }
@@ -486,15 +497,8 @@
         </div>
       </div>
 
-      <!-- Page navigation (selecting phase, multi-page games) -->
-      <div id="page-nav-section" style="display:none;margin-bottom:16px">
-        <div class="section-title" style="margin-bottom:8px">Board Page</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="btn btn-gray btn-sm" id="page-prev-btn">◀ Prev</button>
-          <span id="page-nav-label" style="font-family:Impact,sans-serif;font-size:15px;letter-spacing:2px;color:var(--gold)">PAGE 1 OF 2</span>
-          <button class="btn btn-gray btn-sm" id="page-next-btn">Next ▶</button>
-        </div>
-      </div>
+      <!-- Page tabs (selecting phase, multi-page games) -->
+      <div id="game-page-tabs" style="display:none;margin-bottom:16px"></div>
 
       <!-- Tiebreaker phase -->
       <div id="tiebreaker-section">
@@ -557,6 +561,7 @@
           <button class="btn btn-sm" id="delete-lib-btn" style="background:transparent;border:1px solid #882828;color:#cc4444">🗑 Delete All</button>
           <button class="btn btn-sm" id="gen-cats-btn" style="background:#1a1a60;border:1px solid #556;color:rgba(255,255,255,.7)">✨ Generate</button>
           <button class="btn btn-gold btn-sm" id="add-cat-btn">+ Category</button>
+          <div id="page-tabs-bar"></div>
         </div>
         <div id="cat-list"></div>
       </div>
@@ -636,6 +641,7 @@
   const socket = io();
   let gameState = null;
   let libState  = null;
+  let activePage = null; // currently viewed page tab in library
 
   // ── Confirm modal ──────────────────────────────────────────────────────────
 
@@ -956,20 +962,27 @@
     document.getElementById('daily-double-section').style.display    = phase === 'daily-double'    ? 'block' : 'none';
     document.getElementById('tiebreaker-section').style.display      = phase === 'tiebreaker'      ? 'block' : 'none';
 
-    // Page navigation — only show during selecting when multiple pages exist
-    if (phase === 'selecting' && gameState.categories) {
-      const pages = [...new Set(gameState.categories.map(c => c.page || 1))].sort();
-      const cur   = gameState.currentPage || 1;
-      if (pages.length > 1) {
-        document.getElementById('page-nav-section').style.display = 'block';
-        document.getElementById('page-nav-label').textContent = `PAGE ${cur} OF ${pages.length}`;
-        document.getElementById('page-prev-btn').disabled = cur <= pages[0];
-        document.getElementById('page-next-btn').disabled = cur >= pages[pages.length - 1];
+    // Page tabs — only show during selecting when multiple pages exist
+    const gamePageTabsEl = document.getElementById('game-page-tabs');
+    if (phase === 'selecting' && gameState.pages?.length > 1) {
+      const cur = gameState.currentPage || 1;
+      const usedIds = new Set(gameState.categories.map(c => c.page || 1));
+      const visPages = gameState.pages.filter(p => usedIds.has(p.id));
+      if (visPages.length > 1) {
+        gamePageTabsEl.style.display = 'block';
+        gamePageTabsEl.innerHTML = `
+          <div class="section-title" style="margin-bottom:8px">Board Page</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${visPages.map(p => `<button class="game-page-btn${p.id === cur ? ' gp-active' : ''}" data-page="${p.id}">${p.name}</button>`).join('')}
+          </div>`;
+        gamePageTabsEl.querySelectorAll('.game-page-btn').forEach(btn => {
+          btn.addEventListener('click', () => socket.emit('switch-page', { page: +btn.dataset.page }));
+        });
       } else {
-        document.getElementById('page-nav-section').style.display = 'none';
+        gamePageTabsEl.style.display = 'none';
       }
     } else {
-      document.getElementById('page-nav-section').style.display = 'none';
+      gamePageTabsEl.style.display = 'none';
     }
 
     renderPlayers();
@@ -1176,12 +1189,55 @@
   let pendingCatId = null;
   let pendingCatAI = false;
 
+  function renderPageTabsBar(pages) {
+    const bar = document.getElementById('page-tabs-bar');
+    // Ensure activePage is valid
+    if (!pages.find(p => p.id === activePage)) activePage = pages[0]?.id ?? 1;
+
+    bar.innerHTML = pages.map(p => `
+      <button class="page-tab${p.id === activePage ? ' pg-active' : ''}" data-pid="${p.id}" title="Double-click to rename">${p.name}${pages.length > 1 ? `<span class="page-tab-del" data-pid="${p.id}" title="Delete page">×</span>` : ''}</button>
+    `).join('') + `<button class="page-tab-add" id="add-page-btn">+ Page</button>`;
+
+    bar.querySelectorAll('.page-tab').forEach(btn => {
+      btn.addEventListener('click', e => {
+        if (e.target.classList.contains('page-tab-del')) return;
+        activePage = +btn.dataset.pid;
+        renderLibrary();
+      });
+      btn.addEventListener('dblclick', e => {
+        if (e.target.classList.contains('page-tab-del')) return;
+        const id = +btn.dataset.pid;
+        const cur = pages.find(p => p.id === id)?.name || '';
+        const newName = prompt('Rename page:', cur);
+        if (newName?.trim()) socket.emit('rename-page', { id, name: newName.trim() });
+      });
+    });
+    bar.querySelectorAll('.page-tab-del').forEach(x => {
+      x.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = +x.dataset.pid;
+        const page = pages.find(p => p.id === id);
+        if (confirm(`Delete "${page?.name}"? Categories on this page will move to the first page.`)) {
+          if (activePage === id) activePage = pages.find(p => p.id !== id)?.id ?? null;
+          socket.emit('delete-page', { id });
+        }
+      });
+    });
+    bar.querySelector('#add-page-btn')?.addEventListener('click', () => socket.emit('add-page'));
+  }
+
   function renderLibrary() {
     if (!libState || gameState?.phase !== 'lobby') return;
 
-    const { categories, activeIds } = libState;
+    const { categories, activeIds, pages = [{ id: 1, name: 'Page 1' }] } = libState;
     const activeCount = categories.filter(c => activeIds.includes(c.id)).length;
     document.getElementById('active-count').textContent = `${activeCount} of ${categories.length} in game`;
+
+    renderPageTabsBar(pages);
+
+    // Filter to the active page tab
+    if (!pages.find(p => p.id === activePage)) activePage = pages[0]?.id ?? 1;
+    const visibleCats = categories.filter(c => (c.page || 1) === activePage);
 
     const container = document.getElementById('cat-list');
     const savedY    = window.scrollY;
@@ -1200,7 +1256,7 @@
     });
 
     container.innerHTML = '';
-    categories.forEach((cat, idx) => buildCatCard(container, cat, activeIds.includes(cat.id), idx + 1));
+    visibleCats.forEach((cat, idx) => buildCatCard(container, cat, activeIds.includes(cat.id), idx + 1, pages));
 
     // Restore category selection mode
     if (catSelMode) {
@@ -1224,7 +1280,7 @@
     requestAnimationFrame(() => window.scrollTo(0, savedY));
   }
 
-  function buildCatCard(container, cat, isActive, num) {
+  function buildCatCard(container, cat, isActive, num, pages = [{ id: 1, name: 'Page 1' }]) {
     const readyQs = cat.questions.filter(q => q.question.trim() && q.answer.trim() && q.enabled !== false).length;
     const totalQs = cat.questions.length;
     const isOpen  = openCats.has(cat.id);
@@ -1235,7 +1291,9 @@
 
     const catRound = cat.round || 1;
     const catPage  = cat.page  || 1;
-    const showPagePills = catRound !== 'final';
+    const pageSelectHtml = catRound !== 'final' && pages.length > 1
+      ? `<select class="page-select" title="Assign to page">${pages.map(p => `<option value="${p.id}"${p.id === catPage ? ' selected' : ''}>${p.name}</option>`).join('')}</select>`
+      : '';
     card.innerHTML = `
       <div class="lib-cat-header">
         <input type="checkbox" class="cat-sel-check" title="Select for deletion">
@@ -1251,11 +1309,7 @@
           <button class="round-pill${catRound === 1 ? ' active-r1' : ''}" data-id="${cat.id}" data-round="1" title="Round 1">R1</button>
           <button class="round-pill${catRound === 2 ? ' active-r2' : ''}" data-id="${cat.id}" data-round="2" title="Round 2">R2</button>
           <button class="round-pill${catRound === 'final' ? ' active-fj' : ''}" data-id="${cat.id}" data-round="final" title="Final Jeopardy">FJ</button>
-          ${showPagePills ? `
-          <div class="page-pill-sep"></div>
-          <button class="page-pill${catPage === 1 ? ' active-p1' : ''}" data-id="${cat.id}" data-page="1" title="Board Page 1">P1</button>
-          <button class="page-pill${catPage === 2 ? ' active-p2' : ''}" data-id="${cat.id}" data-page="2" title="Board Page 2">P2</button>
-          ` : ''}
+          ${pageSelectHtml}
         </div>
         <button class="btn-icon expand-btn" data-id="${cat.id}" title="Edit questions">
           <span class="chevron ${isOpen ? 'open' : ''}">▶</span>
@@ -1372,13 +1426,16 @@
       });
     });
 
-    // Page pills
-    card.querySelectorAll('.page-pill').forEach(pill => {
-      pill.addEventListener('click', e => {
+    // Page select
+    const pageSel = card.querySelector('.page-select');
+    if (pageSel) {
+      pageSel.addEventListener('change', e => {
         e.stopPropagation();
-        socket.emit('set-category-page', { id: cat.id, page: +pill.dataset.page });
+        socket.emit('set-category-page', { id: cat.id, page: +pageSel.value });
+        activePage = +pageSel.value;
+        renderLibrary();
       });
-    });
+    }
 
     // Generate AI questions
     card.querySelector('.gen-btn').addEventListener('click', () => {
@@ -1662,21 +1719,6 @@
     });
     return results;
   }
-
-  document.getElementById('page-prev-btn').addEventListener('click', () => {
-    if (!gameState?.categories) return;
-    const pages = [...new Set(gameState.categories.map(c => c.page || 1))].sort();
-    const cur = gameState.currentPage || 1;
-    const idx = pages.indexOf(cur);
-    if (idx > 0) socket.emit('switch-page', { page: pages[idx - 1] });
-  });
-  document.getElementById('page-next-btn').addEventListener('click', () => {
-    if (!gameState?.categories) return;
-    const pages = [...new Set(gameState.categories.map(c => c.page || 1))].sort();
-    const cur = gameState.currentPage || 1;
-    const idx = pages.indexOf(cur);
-    if (idx < pages.length - 1) socket.emit('switch-page', { page: pages[idx + 1] });
-  });
 
   document.getElementById('start-round2-btn').addEventListener('click', () => socket.emit('start-round2'));
   document.getElementById('force-reveal-btn').addEventListener('click', () => socket.emit('reveal-final-question'));
