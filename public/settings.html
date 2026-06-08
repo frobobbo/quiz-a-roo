@@ -377,17 +377,20 @@
   let selectedVoiceId = VOICES[0].id;
   let customVoices = []; // { id, name } — user-added voices
 
+  const RANDOM_VOICE = { id: '__random__', name: '🎲 Random Voice', desc: 'Pick a different voice for each question', custom: false };
+
   function buildVoiceGrid(currentId) {
     selectedVoiceId = currentId || VOICES[0].id;
     const allVoices = [
+      RANDOM_VOICE,
       ...VOICES.map(v => ({ ...v, custom: false })),
       ...customVoices.map(v => ({ ...v, desc: 'Custom voice', custom: true })),
     ];
-    // If selectedVoiceId not found, fall back to first
+    // If selectedVoiceId not found, fall back to first preset
     if (!allVoices.find(v => v.id === selectedVoiceId)) selectedVoiceId = VOICES[0].id;
     const grid = document.getElementById('voice-grid');
     grid.innerHTML = allVoices.map(v => `
-      <label class="voice-option${v.id === selectedVoiceId ? ' selected' : ''}">
+      <label class="voice-option${v.id === selectedVoiceId ? ' selected' : ''}${v.id === '__random__' ? ' style="border-style:dashed"' : ''}">
         <input type="radio" class="voice-radio" name="voice" value="${v.id}" ${v.id === selectedVoiceId ? 'checked' : ''}>
         <div class="voice-label">${v.name}<span>${v.desc}</span></div>
         ${v.custom ? `<button type="button" class="voice-del" data-id="${v.id}" title="Remove from library">×</button>` : ''}
@@ -580,7 +583,7 @@
     customVoices = Array.isArray(tts.customVoices) ? tts.customVoices : [];
     document.getElementById('tts-enabled-toggle').checked = !!tts.enabled;
     document.getElementById('tts-options').style.display = tts.enabled ? 'block' : 'none';
-    const allVoiceIds = [...VOICES, ...customVoices].map(v => v.id);
+    const allVoiceIds = ['__random__', ...VOICES, ...customVoices].map(v => typeof v === 'string' ? v : v.id);
     buildVoiceGrid(allVoiceIds.includes(tts.voiceId) ? tts.voiceId : VOICES[0].id);
 
     // Appearance

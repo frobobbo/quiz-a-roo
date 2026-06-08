@@ -497,13 +497,25 @@ function advanceTurn(winnerId) {
 
 // ── TTS proxy ─────────────────────────────────────────────────────────────────
 
+const PRESET_VOICE_IDS = [
+  'pNInz6obpgDQGcFmaJgB','SOYHLrjzK2X1ezoPC6cr','onwK4e9ZLuTAKqWW03F9',
+  'TX3LPaxmHKxFdv7VOQHJ','VR6AewLTigWG4xSOukaG','TxGEqnHWrfWFTfGW9XjX',
+  'ZQe5CZNOzWyzPSCn5a3c','flq6f7ztfj1uc8fnMIAO','21m00Tcm4TlvDq8ikWAM','EXAVITQu4vr4xnSDxMaL',
+];
+
 app.post('/api/tts', (req, res) => {
   const text = (req.body?.text || '').trim().slice(0, 500);
   if (!text) return res.status(400).json({ error: 'text required' });
   if (!appSettings.tts?.enabled) return res.status(204).end();
   if (!elevenLabsKey) return res.status(503).json({ error: 'ElevenLabs key not configured' });
 
-  const voiceId = (appSettings.tts?.voiceId || 'pNInz6obpgDQGcFmaJgB').trim();
+  let voiceId = (appSettings.tts?.voiceId || PRESET_VOICE_IDS[0]).trim();
+  if (voiceId === '__random__') {
+    const customIds = (appSettings.tts?.customVoices || []).map(v => v.id);
+    const pool = [...PRESET_VOICE_IDS, ...customIds];
+    voiceId = pool[Math.floor(Math.random() * pool.length)];
+    console.log(`[TTS] Random voice selected: ${voiceId}`);
+  }
   const body    = JSON.stringify({
     text,
     model_id: 'eleven_turbo_v2_5',
