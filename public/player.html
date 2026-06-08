@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Trivia Night — Player</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --blue: #1a28b0;
+      --dark: #16166a;
+      --gold: #c09a38;
+      --white: #fff;
+      --green: #2e7a40;
+      --red: #9e3535;
+      --gray: #333;
+    }
+
+    body[data-theme="midnight"] {
+      --blue: #06060e; --dark: #0c0c20; --gold: #b8943a; --white: #e0e0f0;
+      --green: #286a38; --red: #882828;
+    }
+    body[data-theme="retro"] {
+      --blue: #0606e0; --dark: #0404b0; --gold: #f0c800; --white: #ffffff;
+      --green: #00a040; --red: #cc2222;
+    }
+    body[data-theme="forest"] {
+      --blue: #071a0e; --dark: #0a2414; --gold: #c8a828; --white: #e8f0e8;
+      --green: #2a8838; --red: #882828;
+    }
+    body[data-theme="crimson"] {
+      --blue: #1a0808; --dark: #240c0c; --gold: #c09a38; --white: #f0e8e8;
+      --green: #286838; --red: #b02828;
+    }
+    body[data-theme="ocean"] {
+      --blue: #052028; --dark: #073038; --gold: #44c4b8; --white: #e4f8f8;
+      --green: #28806a; --red: #882828;
+    }
+    body[data-theme="violet"] {
+      --blue: #1a0838; --dark: #220c4a; --gold: #d4a830; --white: #efe8ff;
+      --green: #286840; --red: #9e3535;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--blue);
+      color: var(--white);
+      font-family: Georgia, serif;
+      touch-action: manipulation;
+    }
+
+    /* All screens are hidden by default; .active makes them visible */
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 20px;
+      gap: 16px;
+      text-align: center;
+    }
+    .screen.active { display: flex; }
+
+    /* Screens that need full centering (join, wait, gameover) */
+    .screen.centered { justify-content: center; }
+
+    /* Screens that scroll (select steps) */
+    .screen.scrollable { overflow-y: auto; }
+
+    h1 {
+      font-family: Impact, sans-serif;
+      font-size: 32px;
+      color: var(--gold);
+      letter-spacing: 4px;
+    }
+
+    /* ── SCORE CHIP ── */
+    .score-chip {
+      background: var(--dark);
+      border: 2px solid var(--gold);
+      border-radius: 30px;
+      padding: 8px 24px;
+      font-size: 15px;
+      width: 100%;
+      max-width: 400px;
+      flex-shrink: 0;
+    }
+    .score-chip .amt {
+      color: var(--gold);
+      font-family: Impact, sans-serif;
+      font-size: 22px;
+    }
+
+    /* ── EMOJI PICKER ── */
+    .emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; width: 100%; max-width: 340px; }
+    .emoji-btn  { font-size: 26px; background: var(--dark); border: 2px solid transparent; border-radius: 8px;
+                  padding: 6px; cursor: pointer; transition: border-color .15s, transform .1s; text-align: center; }
+    .emoji-btn:active { transform: scale(0.92); }
+    .emoji-btn.selected { border-color: var(--gold); background: rgba(192,154,56,.15); }
+    .emoji-label { font-size: 12px; opacity: .5; text-align: center; width: 100%; max-width: 340px; }
+
+    /* ── TEAM SELECTION ── */
+    .team-btn {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; background: var(--dark); border: 2px solid #334;
+      border-radius: 12px; font-size: 18px; font-weight: bold; color: var(--white);
+      cursor: pointer; transition: border-color .15s;
+      width: 100%; max-width: 400px;
+    }
+    .team-btn:active { transform: scale(0.97); }
+    .team-btn .team-members { font-size: 13px; opacity: .55; font-weight: normal; }
+    .team-input {
+      padding: 14px 18px; font-size: 18px; border: 2px solid var(--gold);
+      border-radius: 10px; background: var(--dark); color: var(--white);
+      text-align: center; outline: none; width: 100%; max-width: 400px;
+    }
+    .team-input::placeholder { color: rgba(255,255,255,.35); }
+    #create-team-form { display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+    .btn-secondary {
+      padding: 12px 24px; font-size: 15px; background: transparent;
+      border: 2px solid rgba(255,255,255,.3); border-radius: 10px; color: rgba(255,255,255,.6);
+      cursor: pointer;
+    }
+
+    /* ── DAILY DOUBLE WAGER ── */
+    #dd-wager-screen { justify-content: center; }
+
+    /* ── JOIN ── */
+    #join-form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 340px; }
+
+    #join-name {
+      padding: 16px 20px;
+      font-size: 20px;
+      border: 2px solid var(--gold);
+      border-radius: 10px;
+      background: var(--dark);
+      color: var(--white);
+      text-align: center;
+      outline: none;
+    }
+    #join-name::placeholder { color: rgba(255,255,255,0.4); }
+
+    .btn-primary {
+      padding: 18px;
+      font-size: 20px;
+      font-family: Impact, sans-serif;
+      letter-spacing: 2px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background: var(--gold);
+      color: #000;
+      transition: transform 0.1s, opacity 0.1s;
+    }
+    .btn-primary:active { transform: scale(0.96); opacity: 0.85; }
+
+    .error-msg { color: #ff6b6b; font-size: 15px; min-height: 20px; }
+
+    /* ── WAITING ── */
+    .waiting-text  { font-size: 18px; opacity: 0.75; font-style: italic; }
+    .current-player { font-size: 24px; color: var(--gold); font-weight: bold; }
+
+    /* ── CATEGORY / VALUE PICKER ── */
+    .turn-banner {
+      background: var(--gold);
+      color: #000;
+      width: 100%;
+      max-width: 460px;
+      padding: 14px;
+      border-radius: 10px;
+      font-family: Impact, sans-serif;
+      font-size: 20px;
+      letter-spacing: 2px;
+      flex-shrink: 0;
+    }
+
+    .pick-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      max-width: 460px;
+    }
+
+    /* Category buttons */
+    .cat-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      background: var(--dark);
+      border: 2px solid #334;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: bold;
+      text-align: left;
+      color: var(--white);
+      cursor: pointer;
+      transition: background 0.1s, transform 0.1s, border-color 0.1s;
+    }
+    .cat-btn:active { transform: scale(0.97); background: #252da0; }
+    .cat-btn.all-used { opacity: 0.35; pointer-events: none; }
+    .cat-btn .cat-remaining {
+      font-family: Impact, sans-serif;
+      font-size: 14px;
+      color: var(--gold);
+      opacity: 0.8;
+      white-space: nowrap;
+      margin-left: 12px;
+    }
+
+    /* Back button */
+    .back-btn {
+      align-self: flex-start;
+      padding: 10px 16px;
+      background: transparent;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      color: rgba(255,255,255,0.7);
+      font-size: 15px;
+      cursor: pointer;
+      transition: border-color 0.1s, color 0.1s;
+    }
+    .back-btn:active { border-color: var(--gold); color: var(--gold); }
+
+    .val-category-name {
+      font-family: Impact, sans-serif;
+      font-size: 22px;
+      color: var(--gold);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    /* Value buttons */
+    .val-btn {
+      padding: 22px;
+      background: var(--dark);
+      border: 2px solid #334;
+      border-radius: 12px;
+      font-family: Impact, sans-serif;
+      font-size: 32px;
+      color: var(--gold);
+      cursor: pointer;
+      transition: background 0.1s, transform 0.1s;
+      width: 100%;
+    }
+    .val-btn:active  { transform: scale(0.97); background: #252da0; }
+    .val-btn.used    { background: #111133; color: #333; pointer-events: none; border-color: #222; text-decoration: line-through; }
+
+    /* ── BUZZ ── */
+    #buzz-screen { justify-content: space-between; padding: 28px 20px; }
+
+    #q-cat-label {
+      font-family: Impact, sans-serif;
+      color: var(--gold);
+      font-size: 16px;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+
+    #question-display {
+      font-size: clamp(16px, 4.5vw, 22px);
+      line-height: 1.5;
+      max-width: 400px;
+      opacity: 0.9;
+    }
+
+    #buzz-btn {
+      width: min(72vw, 240px);
+      height: min(72vw, 240px);
+      border-radius: 50%;
+      font-family: Impact, sans-serif;
+      font-size: 38px;
+      letter-spacing: 3px;
+      border: 6px solid var(--gold);
+      background: var(--dark);
+      color: var(--gold);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+      transition: transform 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    #buzz-btn:active { transform: scale(0.93); }
+    #buzz-btn.is-first  { background: var(--gold); color: #000; border-color: #fff; animation: buzz-pop 0.3s; }
+    #buzz-btn.is-buzzed { background: var(--gray); color: #666; border-color: #555; }
+    #buzz-btn.is-locked { opacity: 0.45; pointer-events: none; border-color: #446; color: rgba(255,255,255,0.5); }
+    #buzz-lock-num { font-size: 56px; line-height: 1; }
+    #buzz-lock-lbl { font-size: 14px; letter-spacing: 1px; opacity: 0.7; }
+
+    #buzz-position { font-size: 13px; font-family: Georgia, serif; font-style: italic; letter-spacing: 0; opacity: 0.8; }
+    #buzz-status   { font-size: 18px; font-style: italic; min-height: 26px; }
+
+    @keyframes buzz-pop {
+      0%   { transform: scale(0.9); }
+      50%  { transform: scale(1.08); }
+      100% { transform: scale(1); }
+    }
+
+    /* ── GAME OVER ── */
+    .go-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--dark);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 18px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .go-row.me { border: 2px solid var(--gold); }
+
+    /* ── FINAL JEOPARDY ── */
+    .fj-title {
+      font-family: Impact, sans-serif;
+      font-size: 28px;
+      letter-spacing: 5px;
+      color: var(--gold);
+    }
+    .fj-cat {
+      font-family: Impact, sans-serif;
+      font-size: 20px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      border: 2px solid var(--gold);
+      border-radius: 8px;
+      padding: 12px 20px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .fj-wager-label { font-size: 14px; opacity: .6; text-align: left; width: 100%; max-width: 400px; }
+    .fj-wager-max   { font-size: 12px; opacity: .45; text-align: left; width: 100%; max-width: 400px; }
+    #wager-input {
+      width: 100%;
+      max-width: 400px;
+      padding: 16px 20px;
+      font-family: Impact, sans-serif;
+      font-size: 32px;
+      letter-spacing: 2px;
+      color: var(--gold);
+      background: var(--dark);
+      border: 2px solid var(--gold);
+      border-radius: 10px;
+      text-align: center;
+      outline: none;
+    }
+    #wager-input:focus { border-color: #fff; }
+    .fj-submitted-msg { font-size: 16px; color: #5acc80; }
+    .fj-q-text {
+      font-size: clamp(16px, 4vw, 22px);
+      line-height: 1.6;
+      max-width: 440px;
+      opacity: .95;
+    }
+    .fj-answer-prompt {
+      font-size: 16px;
+      opacity: .55;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<!-- JOIN -->
+<div id="join-screen" class="screen centered active">
+  <h1>Trivia Night</h1>
+  <div id="join-form">
+    <input id="join-name" type="text" placeholder="Your name" maxlength="20" autocomplete="off">
+    <div class="emoji-label">Pick an emoji (optional)</div>
+    <div class="emoji-grid" id="emoji-grid"></div>
+    <button class="btn-primary" id="join-btn">JOIN GAME</button>
+    <div class="error-msg" id="join-error"></div>
+  </div>
+</div>
+
+<!-- LOBBY / WAITING -->
+<div id="wait-screen" class="screen centered">
+  <h1>Trivia Night</h1>
+  <div class="score-chip">
+    <span id="wait-name">Player</span><br>
+    <span class="amt" id="wait-score">$0</span>
+  </div>
+  <div class="waiting-text" id="wait-msg">Waiting for host to start…</div>
+</div>
+
+<!-- TEAM SELECTION -->
+<div id="team-screen" class="screen scrollable">
+  <h1>Trivia Night</h1>
+  <div style="font-size:18px;opacity:.75;margin-bottom:4px">Join a Team</div>
+  <div id="team-list" style="width:100%;max-width:400px;display:flex;flex-direction:column;gap:10px"></div>
+  <div id="create-team-form">
+    <input id="team-name-input" class="team-input" type="text" placeholder="Team name" maxlength="24" autocomplete="off">
+    <button class="btn-primary" id="team-create-submit" style="width:100%;max-width:400px">CREATE TEAM</button>
+    <button class="btn-secondary" id="team-create-cancel">Cancel</button>
+  </div>
+  <button class="btn-secondary" id="create-team-btn" style="width:100%;max-width:400px;margin-top:4px">+ Create New Team</button>
+  <div class="error-msg" id="team-error"></div>
+</div>
+
+<!-- STEP 1: Pick a category (my turn) -->
+<div id="cat-screen" class="screen scrollable">
+  <div class="score-chip">
+    <span id="cat-name">Player</span> &nbsp;|&nbsp; <span class="amt" id="cat-score">$0</span>
+  </div>
+  <div class="turn-banner">YOUR TURN — PICK A CATEGORY</div>
+  <div class="pick-list" id="cat-list"></div>
+</div>
+
+<!-- STEP 2: Pick a value -->
+<div id="val-screen" class="screen scrollable">
+  <div class="score-chip">
+    <span id="val-name">Player</span> &nbsp;|&nbsp; <span class="amt" id="val-score">$0</span>
+  </div>
+  <button class="back-btn" id="back-btn">← Back</button>
+  <div class="val-category-name" id="val-cat-name"></div>
+  <div class="pick-list" id="val-list"></div>
+</div>
+
+<!-- WAITING — not my turn -->
+<div id="other-screen" class="screen centered">
+  <div class="score-chip">
+    <span id="other-name">Player</span> &nbsp;|&nbsp; <span class="amt" id="other-score">$0</span>
+  </div>
+  <div class="waiting-text">Waiting for</div>
+  <div class="current-player" id="other-picker"></div>
+  <div class="waiting-text">to pick a question…</div>
+</div>
+
+<!-- BUZZ -->
+<div id="buzz-screen" class="screen">
+  <div class="score-chip">
+    <span id="buz-name">Player</span> &nbsp;|&nbsp; <span class="amt" id="buz-score">$0</span>
+  </div>
+  <div>
+    <div id="q-cat-label"></div>
+    <div id="question-display"></div>
+  </div>
+  <button id="buzz-btn">
+    <span id="buzz-main">BUZZ</span>
+    <span id="buzz-position"></span>
+  </button>
+  <div id="buzz-status"></div>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameover-screen" class="screen centered">
+  <h1>Game Over!</h1>
+  <div id="go-scores" style="display:flex;flex-direction:column;gap:10px;width:100%"></div>
+</div>
+
+<!-- DAILY DOUBLE WAGER -->
+<div id="dd-wager-screen" class="screen centered">
+  <div class="fj-title" style="color:#fff">DAILY DOUBLE!</div>
+  <div class="fj-cat" id="dd-wager-cat"></div>
+  <div class="fj-wager-label">Your wager:</div>
+  <div class="fj-wager-max" id="dd-wager-max">Max: $0</div>
+  <input id="dd-wager-input" type="number" min="0" placeholder="0"
+    style="width:100%;max-width:400px;padding:16px 20px;font-family:Impact,sans-serif;font-size:32px;letter-spacing:2px;color:var(--gold);background:var(--dark);border:2px solid var(--gold);border-radius:10px;text-align:center;outline:none">
+  <button class="btn-primary" id="dd-wager-btn" style="width:100%;max-width:400px">LOCK IN WAGER</button>
+  <div id="dd-wager-wait" style="display:none;font-size:16px;color:#5acc80">Wager locked — get ready!</div>
+</div>
+
+<!-- ROUND OVER (waiting between rounds) -->
+<div id="round-over-screen" class="screen centered">
+  <div class="fj-title">ROUND 1 DONE!</div>
+  <div class="waiting-text" id="round-over-msg">Get ready for Round 2…</div>
+  <div class="score-chip">
+    <span id="round-over-name">Player</span><br>
+    <span class="amt" id="round-over-score">$0</span>
+  </div>
+</div>
+
+<!-- FINAL JEOPARDY — wager -->
+<div id="final-wager-screen" class="screen centered">
+  <div class="fj-title">FINAL JEOPARDY</div>
+  <div class="fj-cat" id="fj-wager-cat"></div>
+  <div class="fj-wager-label">Place your wager:</div>
+  <div class="fj-wager-max" id="fj-wager-max">Max: $0</div>
+  <input id="wager-input" type="number" min="0" placeholder="0">
+  <button class="btn-primary" id="wager-submit-btn" style="width:100%;max-width:400px">LOCK IN WAGER</button>
+  <div class="fj-submitted-msg" id="fj-wagered-msg" style="display:none">Wager locked in! Waiting for others…</div>
+</div>
+
+<!-- FINAL JEOPARDY — question phase -->
+<div id="final-question-screen" class="screen centered">
+  <div class="fj-title">FINAL JEOPARDY</div>
+  <div class="fj-cat" id="fj-q-cat-player"></div>
+  <div class="fj-q-text" id="fj-q-text-player"></div>
+  <div id="fj-answer-entry" style="display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:400px">
+    <textarea id="fj-answer-input"
+      placeholder="Type your answer…"
+      maxlength="200"
+      rows="3"
+      style="width:100%;padding:14px 16px;font-size:18px;font-family:Georgia,serif;background:var(--dark);border:2px solid var(--gold);border-radius:10px;color:var(--white);outline:none;resize:none;text-align:center;line-height:1.4"
+    ></textarea>
+    <button class="btn-primary" id="fj-answer-submit-btn" style="width:100%">SUBMIT ANSWER</button>
+  </div>
+  <div id="fj-answer-submitted" style="display:none;color:#5acc80;font-size:16px;text-align:center">
+    Answer submitted! Waiting for host to judge…
+  </div>
+  <div class="score-chip">
+    <span id="fj-q-name">Player</span> &nbsp;|&nbsp; <span class="amt" id="fj-q-score">$0</span>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  let myId   = null;
+  let state  = null;
+  let selectedCatIndex = null; // tracks step-1 selection
+
+  // ── Join ──────────────────────────────────────────────────────────────────
+
+  document.getElementById('join-btn').addEventListener('click', doJoin);
+  document.getElementById('join-name').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+
+  function doJoin() {
+    const name = document.getElementById('join-name').value.trim();
+    if (!name) { document.getElementById('join-error').textContent = 'Enter a name.'; return; }
+    socket.emit('join-player', { name, emoji: selectedEmoji });
+  }
+
+  socket.on('connect', () => {
+    const token = localStorage.getItem('trivia_token');
+    if (token) socket.emit('rejoin-player', { token });
+  });
+
+  socket.on('join-error', msg => { document.getElementById('join-error').textContent = msg; });
+
+  socket.on('joined', ({ playerId, token }) => {
+    myId = playerId;
+    if (token) localStorage.setItem('trivia_token', token);
+    // render() will decide the right screen (wait or team selection)
+    if (state) render(); else showScreen('wait-screen');
+  });
+
+  socket.on('rejoin-failed', () => {
+    localStorage.removeItem('trivia_token');
+  });
+
+  // ── State ─────────────────────────────────────────────────────────────────
+
+  let prevBuzzedPlayerId = null;
+
+  socket.on('game-state', newState => {
+    state = newState;
+    if (newState.theme) document.body.dataset.theme = newState.theme;
+    // Ping when player's own buzz registers
+    if (myId && newState.buzzedPlayerId === myId && prevBuzzedPlayerId !== myId) {
+      playBuzzConfirm();
+    }
+    prevBuzzedPlayerId = newState.buzzedPlayerId;
+    render();
+  });
+
+  function me() { return state?.players.find(p => p.id === myId); }
+  function myTeam() {
+    const p = me();
+    return (p?.teamId && state?.teams) ? state.teams.find(t => t.id === p.teamId) : null;
+  }
+  function myScore() {
+    if (state?.settings?.teamMode) return myTeam()?.score ?? 0;
+    return me()?.score ?? 0;
+  }
+  function currentTurnName() {
+    if (state?.settings?.teamMode) return state.teams?.[state.currentPlayerIndex]?.name ?? '';
+    return state?.players[state.currentPlayerIndex]?.name ?? '';
+  }
+
+  function render() {
+    if (!state || !myId) return;
+    const player = me();
+    if (!player) return;
+
+    switch (state.phase) {
+      case 'lobby':
+        // In team mode, show team selection if player hasn't joined a team yet
+        if (state.settings?.teamMode && !player.teamId) {
+          renderTeamScreen();
+          break;
+        }
+        setText('wait-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+        setText('wait-score', fmt(myScore()));
+        showScreen('wait-screen');
+        break;
+
+      case 'selecting':
+        if (player.isCurrentTurn) {
+          renderCatScreen(player);
+        } else {
+          setText('other-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+          setText('other-score', fmt(myScore()));
+          setText('other-picker', currentTurnName());
+          showScreen('other-screen');
+        }
+        break;
+
+      case 'question':
+        renderBuzzScreen(player);
+        break;
+
+      case 'daily-double':
+        renderDailyDoubleWager(player);
+        break;
+
+      case 'tiebreaker':
+        if (state.tiebreakerPlayers?.includes(myId)) {
+          renderBuzzScreen(player);
+        } else {
+          setText('other-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+          setText('other-score', fmt(myScore()));
+          setText('other-picker', 'TIEBREAKER in progress…');
+          showScreen('other-screen');
+        }
+        break;
+
+      case 'round-over':
+        setText('round-over-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+        setText('round-over-score', fmt(myScore()));
+        showScreen('round-over-screen');
+        break;
+
+      case 'final-wager':
+        renderFinalWager(player);
+        break;
+
+      case 'final-question':
+        renderFinalQuestion(player);
+        break;
+
+      case 'game-over':
+        renderGameOver(player);
+        break;
+    }
+  }
+
+  function renderDailyDoubleWager(player) {
+    if (!player.isCurrentTurn) {
+      setText('other-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+      setText('other-score', fmt(myScore()));
+      setText('other-picker', currentTurnName() + ' found a Daily Double!');
+      showScreen('other-screen');
+      return;
+    }
+    setText('dd-wager-cat', state.currentQuestion?.categoryName ?? '');
+    const maxWager = Math.max(myScore(), state.currentQuestion?.value ?? 0);
+    setText('dd-wager-max', `Max: ${fmt(maxWager)}`);
+    const input = document.getElementById('dd-wager-input');
+    input.max = maxWager;
+    if (input.value === '') input.value = maxWager;
+    input.disabled = false;
+    document.getElementById('dd-wager-btn').style.display = 'block';
+    document.getElementById('dd-wager-wait').style.display = 'none';
+    showScreen('dd-wager-screen');
+  }
+
+  let wagerSubmitted = false;
+
+  function renderFinalWager(player) {
+    const fq = state.finalQuestion;
+    setText('fj-wager-cat', fq?.categoryName ?? 'FINAL JEOPARDY');
+    const maxWager = Math.max(myScore(), 0);
+    setText('fj-wager-max', `Max: ${fmt(maxWager)}`);
+    const wagerKey = state.settings?.teamMode ? player.teamId : myId;
+    const alreadyWagered = state.finalWagers[wagerKey] === true || typeof state.finalWagers[wagerKey] === 'number';
+    const wagerInput = document.getElementById('wager-input');
+    wagerInput.max = maxWager;
+    if (wagerInput.value === '') wagerInput.value = maxWager;
+    if (alreadyWagered) {
+      wagerInput.disabled = true;
+      document.getElementById('wager-submit-btn').style.display = 'none';
+      document.getElementById('fj-wagered-msg').style.display = 'block';
+    } else {
+      wagerInput.disabled = false;
+      document.getElementById('wager-submit-btn').style.display = 'block';
+      document.getElementById('fj-wagered-msg').style.display = 'none';
+    }
+    showScreen('final-wager-screen');
+  }
+
+  function renderFinalQuestion(player) {
+    const fq = state.finalQuestion;
+    setText('fj-q-cat-player', fq?.categoryName ?? 'FINAL JEOPARDY');
+    setText('fj-q-text-player', fq?.question ?? '');
+    setText('fj-q-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+    setText('fj-q-score', fmt(myScore()));
+    const judgedKey = state.settings?.teamMode ? player.teamId : myId;
+    const answerKey = state.settings?.teamMode ? player.teamId : myId;
+    const judged = state.finalJudged?.includes(judgedKey);
+    // In team mode, show submitted if any team member already answered
+    const alreadyAnswered = state.finalAnswers?.[answerKey] !== undefined;
+    const hideEntry = judged || alreadyAnswered;
+    document.getElementById('fj-answer-entry').style.display     = hideEntry ? 'none' : 'flex';
+    document.getElementById('fj-answer-submitted').style.display = hideEntry ? 'block' : 'none';
+    if (judged) setText('fj-answer-submitted', 'Answer judged — waiting for others…');
+    else if (alreadyAnswered) setText('fj-answer-submitted', 'Answer submitted — waiting for host to judge…');
+    showScreen('final-question-screen');
+  }
+
+  // ── Step 1: Category picker ───────────────────────────────────────────────
+
+  function renderCatScreen(player) {
+    setText('cat-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+    setText('cat-score', fmt(myScore()));
+
+    const list = document.getElementById('cat-list');
+    list.innerHTML = '';
+
+    state.categories.forEach((cat, ci) => {
+      const remaining = cat.questions.filter(q => !q.used).length;
+      const btn = document.createElement('button');
+      btn.className = `cat-btn${remaining === 0 ? ' all-used' : ''}`;
+      btn.innerHTML = `
+        <span>${esc(cat.name)}</span>
+        <span class="cat-remaining">${remaining} left</span>
+      `;
+      if (remaining > 0) {
+        btn.addEventListener('click', () => {
+          selectedCatIndex = ci;
+          renderValScreen(player, ci);
+        });
+      }
+      list.appendChild(btn);
+    });
+
+    showScreen('cat-screen');
+  }
+
+  // ── Step 2: Value picker ──────────────────────────────────────────────────
+
+  function renderValScreen(player, catIndex) {
+    setText('val-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+    setText('val-score', fmt(myScore()));
+
+    const cat = state.categories[catIndex];
+    setText('val-cat-name', cat.name);
+
+    const list = document.getElementById('val-list');
+    list.innerHTML = '';
+
+    cat.questions.forEach((q, qi) => {
+      const btn = document.createElement('button');
+      btn.className = `val-btn${q.used ? ' used' : ''}`;
+      btn.textContent = `$${q.value}`;
+      if (!q.used) {
+        btn.addEventListener('click', () => {
+          socket.emit('select-question', { categoryIndex: catIndex, questionIndex: qi });
+        });
+      }
+      list.appendChild(btn);
+    });
+
+    showScreen('val-screen');
+  }
+
+  document.getElementById('back-btn').addEventListener('click', () => {
+    const player = me();
+    if (player) renderCatScreen(player);
+  });
+
+  // ── Buzz screen ───────────────────────────────────────────────────────────
+
+  let lockInterval = null;
+
+  function startLockCountdown(openAt) {
+    if (lockInterval) { clearInterval(lockInterval); lockInterval = null; }
+    if (!openAt) return;
+    const tick = () => {
+      const secs = Math.ceil(Math.max(0, openAt - Date.now()) / 1000);
+      const el = document.getElementById('buzz-main');
+      if (el) el.textContent = secs || '';
+    };
+    tick();
+    lockInterval = setInterval(tick, 100);
+  }
+
+  function stopLockCountdown() {
+    if (lockInterval) { clearInterval(lockInterval); lockInterval = null; }
+    const el = document.getElementById('buzz-main');
+    if (el) el.textContent = 'BUZZ';
+  }
+
+  function renderBuzzScreen(player) {
+    setText('buz-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
+    setText('buz-score', fmt(myScore()));
+
+    const q = state.currentQuestion;
+    setText('q-cat-label', q ? `${q.categoryName}  —  $${q.value}` : '');
+    setText('question-display', q?.question ?? '');
+
+    const btn     = document.getElementById('buzz-btn');
+    const posEl   = document.getElementById('buzz-position');
+    const statEl  = document.getElementById('buzz-status');
+
+    if (!state.buzzOpen) {
+      btn.classList.remove('is-first', 'is-buzzed');
+      btn.classList.add('is-locked');
+      posEl.textContent  = 'seconds';
+      statEl.textContent = 'Read the question…';
+      startLockCountdown(state.buzzOpenAt);
+      showScreen('buzz-screen');
+      return;
+    }
+
+    stopLockCountdown();
+    btn.classList.remove('is-first', 'is-buzzed', 'is-locked');
+
+    const buzzPos = state.buzzOrder.indexOf(myId);
+
+    if (state.buzzedPlayerId === myId) {
+      btn.classList.add('is-first');
+      posEl.textContent  = "YOU'RE UP!";
+      statEl.textContent = 'Answer out loud!';
+    } else if (buzzPos > 0) {
+      btn.classList.add('is-buzzed');
+      posEl.textContent  = `#${buzzPos + 1} in line`;
+      statEl.textContent = `${state.buzzedPlayerName} is answering…`;
+    } else {
+      posEl.textContent  = '';
+      statEl.textContent = state.buzzedPlayerName ? `${state.buzzedPlayerName} buzzed in!` : '';
+    }
+
+    showScreen('buzz-screen');
+  }
+
+  // Emoji picker setup
+  const EMOJIS = ['🦊','🐼','🦁','🐸','🐧','🦄','🐙','🦋','🐨','🐯','🦅','🐬','🦕','🤖','👽','🎃','🌟','🔥','💎','🎯','🎸','🚀','🍕','🌈'];
+  let selectedEmoji = '';
+  const emojiGrid = document.getElementById('emoji-grid');
+  EMOJIS.forEach(em => {
+    const btn = document.createElement('button');
+    btn.className = 'emoji-btn';
+    btn.textContent = em;
+    btn.addEventListener('click', () => {
+      selectedEmoji = selectedEmoji === em ? '' : em;
+      emojiGrid.querySelectorAll('.emoji-btn').forEach(b => b.classList.toggle('selected', b.textContent === selectedEmoji && selectedEmoji !== ''));
+    });
+    emojiGrid.appendChild(btn);
+  });
+
+  // DD wager button
+  document.getElementById('dd-wager-btn').addEventListener('click', () => {
+    const player = me();
+    if (!player || state?.phase !== 'daily-double') return;
+    const maxWager = Math.max(player.score, state.currentQuestion?.value ?? 0);
+    const raw = parseInt(document.getElementById('dd-wager-input').value) || 0;
+    const wager = Math.min(Math.max(raw, 0), maxWager);
+    socket.emit('submit-daily-double-wager', { wager });
+    document.getElementById('dd-wager-input').disabled = true;
+    document.getElementById('dd-wager-btn').style.display = 'none';
+    document.getElementById('dd-wager-wait').style.display = 'block';
+  });
+
+  document.getElementById('fj-answer-submit-btn').addEventListener('click', () => {
+    const answer = document.getElementById('fj-answer-input').value.trim();
+    if (!answer) {
+      document.getElementById('fj-answer-input').focus();
+      return;
+    }
+    socket.emit('submit-final-answer', { answer });
+    document.getElementById('fj-answer-entry').style.display     = 'none';
+    document.getElementById('fj-answer-submitted').style.display = 'block';
+    setText('fj-answer-submitted', 'Answer submitted! Waiting for host to judge…');
+  });
+
+  document.getElementById('wager-submit-btn').addEventListener('click', () => {
+    const player = me();
+    if (!player || state?.phase !== 'final-wager') return;
+    const max = Math.max(player.score, 0);
+    const raw = parseInt(document.getElementById('wager-input').value) || 0;
+    const wager = Math.min(Math.max(raw, 0), max);
+    socket.emit('submit-wager', { wager });
+    document.getElementById('wager-input').disabled = true;
+    document.getElementById('wager-submit-btn').style.display = 'none';
+    document.getElementById('fj-wagered-msg').style.display = 'block';
+  });
+
+  document.getElementById('buzz-btn').addEventListener('click', () => {
+    if (!state || state.phase !== 'question') return;
+    if (state.buzzOrder.includes(myId)) return;
+    socket.emit('buzz-in');
+    playBuzz();
+  });
+
+  // ── Game over ─────────────────────────────────────────────────────────────
+
+  function renderGameOver(player) {
+    const isTeam = state.settings?.teamMode && state.teams?.length;
+    const sorted = isTeam
+      ? [...state.teams].sort((a, b) => b.score - a.score)
+      : [...state.players].sort((a, b) => b.score - a.score);
+    const myKey = isTeam ? player.teamId : myId;
+    document.getElementById('go-scores').innerHTML = sorted.map((item, i) => `
+      <div class="go-row${item.id === myKey ? ' me' : ''}">
+        <span style="width:28px;text-align:center">${i === 0 ? '🏆' : '#' + (i+1)}</span>
+        <span style="flex:1;text-align:left">${esc(item.name)}</span>
+        <span style="font-family:Impact,sans-serif;color:#c09a38">${fmt(item.score)}</span>
+      </div>
+    `).join('');
+    showScreen('gameover-screen');
+  }
+
+  // ── Team selection ────────────────────────────────────────────────────────
+
+  function renderTeamScreen() {
+    showScreen('team-screen');
+    document.getElementById('team-error').textContent = '';
+    const list = document.getElementById('team-list');
+    const teams = state.teams ?? [];
+    list.innerHTML = teams.map(t => {
+      const members = state.players.filter(p => p.teamId === t.id).map(p => p.name).join(', ');
+      return `<button class="team-btn" data-tid="${t.id}">
+        <span>${esc(t.name)}</span>
+        <span class="team-members">${members || 'No members yet'}</span>
+      </button>`;
+    }).join('') || '<div style="opacity:.45;font-style:italic;font-size:15px">No teams yet — create one below!</div>';
+    list.querySelectorAll('.team-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        socket.emit('select-team', { teamId: btn.dataset.tid });
+      });
+    });
+  }
+
+  document.getElementById('create-team-btn').addEventListener('click', () => {
+    document.getElementById('create-team-form').style.display = 'flex';
+    document.getElementById('create-team-btn').style.display = 'none';
+    document.getElementById('team-name-input').focus();
+  });
+
+  document.getElementById('team-create-cancel').addEventListener('click', () => {
+    document.getElementById('create-team-form').style.display = 'none';
+    document.getElementById('create-team-btn').style.display = 'block';
+  });
+
+  function submitCreateTeam() {
+    const name = document.getElementById('team-name-input').value.trim();
+    if (!name) return;
+    socket.emit('select-team', { teamName: name });
+    document.getElementById('team-name-input').value = '';
+  }
+
+  document.getElementById('team-create-submit').addEventListener('click', submitCreateTeam);
+  document.getElementById('team-name-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateTeam(); });
+
+  socket.on('team-error', msg => { document.getElementById('team-error').textContent = msg; });
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  let currentScreen = 'join-screen';
+
+  function showScreen(id) {
+    if (currentScreen === id) return;
+    document.getElementById(currentScreen)?.classList.remove('active');
+    document.getElementById(id)?.classList.add('active');
+    // Scroll to top when switching screens
+    document.getElementById(id)?.scrollTo?.(0, 0);
+    currentScreen = id;
+  }
+
+  function setText(id, val) { document.getElementById(id).textContent = val; }
+  function fmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString(); }
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  let _audioCtx = null;
+  function getAudioCtx() {
+    if (!_audioCtx || _audioCtx.state === 'closed') {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return _audioCtx;
+  }
+
+  function playBuzz() {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(); osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+  }
+
+  function playBuzzConfirm() {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      osc.start(); osc.stop(ctx.currentTime + 0.1);
+    } catch(e) {}
+  }
+</script>
+</body>
+</html>

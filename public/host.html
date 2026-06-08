@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trivia Night — Host</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #1a28b0;
+      --dark: #16166a;
+      --darker: #101052;
+      --panel: #0a0a3a;
+      --panel2: #07072a;
+      --gold: #c09a38;
+      --white: #fff;
+      --green: #2e7a40;
+      --red: #9e3535;
+      --border: #1e2050;
+      --bg: #080820;
+    }
+
+    body[data-theme="midnight"] {
+      --blue: #06060e; --dark: #0c0c20; --darker: #040408;
+      --panel: #08081c; --panel2: #050510; --bg: #030308;
+      --gold: #b8943a; --white: #e0e0f0; --green: #286a38; --red: #882828; --border: #12122a;
+    }
+    body[data-theme="retro"] {
+      --blue: #0606e0; --dark: #0404b0; --darker: #030380;
+      --panel: #04049a; --panel2: #030372; --bg: #020260;
+      --gold: #f0c800; --white: #ffffff; --green: #00a040; --red: #cc2222; --border: #0e0ec8;
+    }
+    body[data-theme="forest"] {
+      --blue: #071a0e; --dark: #0a2414; --darker: #04100a;
+      --panel: #071a0e; --panel2: #04100a; --bg: #030c06;
+      --gold: #c8a828; --white: #e8f0e8; --green: #2a8838; --red: #882828; --border: #122a18;
+    }
+    body[data-theme="crimson"] {
+      --blue: #1a0808; --dark: #240c0c; --darker: #0e0404;
+      --panel: #180808; --panel2: #0e0606; --bg: #0a0404;
+      --gold: #c09a38; --white: #f0e8e8; --green: #286838; --red: #b02828; --border: #380e0e;
+    }
+    body[data-theme="ocean"] {
+      --blue: #052028; --dark: #073038; --darker: #021018;
+      --panel: #052028; --panel2: #031018; --bg: #020c14;
+      --gold: #44c4b8; --white: #e4f8f8; --green: #28806a; --red: #882828; --border: #0e3042;
+    }
+    body[data-theme="violet"] {
+      --blue: #1a0838; --dark: #220c4a; --darker: #0e0428;
+      --panel: #170838; --panel2: #0f0526; --bg: #0a0320;
+      --gold: #d4a830; --white: #efe8ff; --green: #286840; --red: #9e3535; --border: #2c0e58;
+    }
+
+    html, body { min-height: 100%; background: var(--bg); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+
+    header {
+      background: var(--darker);
+      border-bottom: 2px solid var(--gold);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    header h1 { font-family: Impact, sans-serif; font-size: 20px; color: var(--gold); letter-spacing: 3px; flex: 1; }
+    .phase-badge { background: var(--dark); border: 1px solid var(--gold); border-radius: 20px; padding: 3px 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
+
+    /* ── LAYOUT ── */
+    .layout { display: flex; min-height: calc(100vh - 46px); }
+    .left  { width: 280px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .right { flex: 1; background: var(--panel2); overflow-y: auto; }
+    .panel-body { padding: 14px; }
+
+    .section { margin-bottom: 18px; }
+    .section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--gold); opacity: 0.6; margin-bottom: 8px; }
+
+    /* ── BUTTONS ── */
+    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; gap: 5px; }
+    .btn:active { transform: scale(0.96); opacity: 0.85; }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-gold  { background: var(--gold); color: #000; }
+    .btn-green { background: var(--green); color: #fff; font-size: 15px; padding: 13px 24px; }
+    .btn-red   { background: var(--red);   color: #fff; font-size: 15px; padding: 13px 24px; }
+    .btn-gray  { background: var(--darker); color: #aaa; border: 1px solid var(--border); }
+    .btn-outline { background: transparent; color: rgba(255,255,255,.5); border: 1px solid #334; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-full { width: 100%; }
+    .btn-icon { background: transparent; border: none; color: rgba(255,255,255,.4); font-size: 14px; cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: background .1s, color .1s; line-height: 1; }
+    .btn-icon:hover { background: rgba(255,255,255,.08); color: var(--white); }
+    .btn-icon.danger:hover { color: #ff6b6b; }
+
+    /* ── PLAYER ROWS ── */
+    .player-row { display: flex; align-items: center; gap: 6px; background: var(--dark); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; margin-bottom: 5px; }
+    .player-row.current { border-color: var(--gold); }
+    .player-name { flex: 1; font-weight: 600; font-size: 13px; }
+    .player-score { font-family: monospace; color: var(--gold); font-size: 14px; min-width: 54px; text-align: right; }
+    .score-adj { display: flex; gap: 3px; }
+
+    /* ── JUDGE PANEL ── */
+    #judge-panel { background: var(--darker); border: 2px solid var(--gold); border-radius: 10px; padding: 18px; text-align: center; margin-bottom: 16px; }
+    #judge-panel h3 { color: var(--gold); font-size: 13px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+    #judge-player-name { font-size: 28px; font-weight: bold; margin: 6px 0 14px; }
+    #judge-buttons { display: flex; gap: 12px; justify-content: center; }
+
+    /* ── CURRENT Q ── */
+    .q-box { background: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+    .q-meta { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); opacity: 0.7; margin-bottom: 6px; }
+    .q-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; }
+    .q-answer-box { background: #1a1a50; border-left: 3px solid var(--gold); padding: 7px 10px; border-radius: 0 4px 4px 0; }
+    .q-answer-box .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; opacity: .5; display: block; margin-bottom: 2px; }
+    .q-answer-box .val { color: var(--gold); font-weight: bold; }
+    .q-answer-box .val.masked { color: transparent; background: var(--gold); border-radius: 3px; user-select: none; cursor: pointer; }
+    .q-reveal-btn { margin-top: 6px; background: transparent; border: 1px solid #446; border-radius: 4px; color: rgba(255,255,255,.45); font-size: 11px; padding: 3px 8px; cursor: pointer; transition: color .15s, border-color .15s; }
+    .q-reveal-btn:hover { color: var(--white); border-color: #667; }
+
+    /* ── LIBRARY MANAGER ── */
+    .lib-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .lib-toolbar .section-title { margin-bottom: 0; }
+    .active-count { background: var(--dark); border: 1px solid #446; border-radius: 12px; padding: 3px 10px; font-size: 11px; color: var(--gold); flex-shrink: 0; }
+    .lib-toolbar-spacer { flex: 1; }
+
+    /* Category card */
+    .lib-cat { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+    .lib-cat.is-active { border-color: #3a3a80; }
+
+    .lib-cat-header { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: var(--dark); }
+    .cat-num { font-family: Impact, sans-serif; font-size: 13px; color: var(--gold); opacity: .5; min-width: 18px; text-align: right; flex-shrink: 0; }
+
+    /* Toggle switch */
+    .tog { position: relative; width: 34px; height: 18px; flex-shrink: 0; }
+    .tog input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .tog-track { position: absolute; inset: 0; background: #2a2a40; border-radius: 9px; cursor: pointer; transition: background .2s; }
+    .tog-track::before { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #666; border-radius: 50%; transition: transform .2s, background .2s; }
+    .tog input:checked ~ .tog-track { background: var(--green); }
+    .tog input:checked ~ .tog-track::before { background: white; transform: translateX(16px); }
+
+    .lib-cat-name { flex: 1; background: transparent; border: none; color: var(--white); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; outline: none; padding: 2px 4px; border-radius: 3px; min-width: 0; }
+    .lib-cat-name:focus { background: rgba(255,255,255,.06); }
+
+    .lib-q-badge { font-size: 10px; white-space: nowrap; color: #666; flex-shrink: 0; }
+    .lib-q-badge.has-ready { color: #2e7a40; }
+
+    .chevron { display: inline-block; transition: transform .2s; font-size: 11px; opacity: .5; }
+    .chevron.open { transform: rotate(90deg); }
+
+    /* Category body */
+    .lib-cat-body { display: none; padding: 8px; background: var(--panel2); border-top: 1px solid var(--border); }
+    .lib-cat-body.open { display: block; }
+
+    .q-rows { display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
+
+    .lib-q-row { display: grid; grid-template-columns: 18px 52px 1fr 1fr 26px; gap: 5px; align-items: start; padding: 5px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
+    .lib-q-row.is-disabled { opacity: 0.38; }
+    .q-enable-check { width: 16px; height: 16px; margin-top: 7px; cursor: pointer; accent-color: var(--green); }
+
+    /* Generate panel */
+    .gen-panel { margin-top: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); overflow: hidden; }
+    .gen-loading { padding: 14px; text-align: center; color: var(--gold); font-size: 13px; opacity: .8; }
+    .gen-header { padding: 8px 10px; background: var(--darker); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .gen-header span { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); opacity: .7; }
+    .gen-q-item { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; cursor: pointer; border-bottom: 1px solid #1a1a40; }
+    .gen-q-item:last-of-type { border-bottom: none; }
+    .gen-q-item:hover { background: rgba(255,255,255,.04); }
+    .gen-q-item input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; accent-color: var(--green); width: 15px; height: 15px; cursor: pointer; }
+    .gen-q-val { color: var(--gold); font-family: Impact, sans-serif; font-size: 13px; min-width: 34px; flex-shrink: 0; }
+    .gen-q-content { flex: 1; min-width: 0; }
+    .gen-q-text { font-size: 12px; line-height: 1.4; margin-bottom: 2px; }
+    .gen-q-ans  { font-size: 11px; color: var(--gold); opacity: .8; }
+    .gen-actions { display: flex; gap: 8px; padding: 8px 10px; background: var(--panel); }
+
+    .lib-q-val { width: 52px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; color: var(--gold); font-family: Impact, sans-serif; font-size: 13px; padding: 6px 4px; text-align: center; outline: none; -moz-appearance: textfield; }
+    .lib-q-val::-webkit-inner-spin-button { display: none; }
+    .lib-q-val:focus { border-color: var(--gold); }
+
+    .lib-q-q, .lib-q-a { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; color: var(--white); padding: 6px 7px; font-size: 12px; font-family: inherit; resize: none; overflow: hidden; min-height: 32px; line-height: 1.4; outline: none; width: 100%; }
+    .lib-q-q:focus, .lib-q-a:focus { border-color: #556; }
+    .lib-q-a { color: var(--gold); }
+    #cat-list:not(.lib-answers-shown) .lib-q-a:not(:focus) { color: transparent; text-shadow: 0 0 7px rgba(255,215,0,0.55); }
+    #cat-list:not(.lib-answers-shown) .gen-q-ans { color: transparent; text-shadow: 0 0 6px rgba(255,215,0,0.5); }
+
+    .lib-add-q { width: 100%; padding: 6px; background: transparent; border: 1px dashed var(--border); border-radius: 6px; color: rgba(255,255,255,.3); font-size: 12px; cursor: pointer; transition: border-color .1s, color .1s; }
+    .lib-add-q:hover { border-color: #556; color: rgba(255,255,255,.6); }
+
+    /* ── ADD CATEGORY MODAL ── */
+    #add-cat-modal { display: none; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center; }
+    #add-cat-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.65); }
+    #add-cat-dialog { position: relative; background: var(--panel); border: 2px solid var(--gold); border-radius: 14px; padding: 26px 24px 20px; width: min(400px, 92vw); display: flex; flex-direction: column; gap: 16px; }
+    #add-cat-dialog h2 { font-family: Impact, sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; margin: 0; }
+    #add-cat-name-input { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; color: var(--white); font-size: 15px; padding: 10px 13px; outline: none; width: 100%; }
+    #add-cat-name-input:focus { border-color: var(--gold); }
+    #add-cat-name-input.shake { animation: cat-shake .3s ease; }
+    @keyframes cat-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .add-cat-how { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.4); }
+    #add-cat-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .add-cat-opt { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 10px; color: var(--white); font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s; text-align: center; line-height: 1.4; }
+    .add-cat-opt:hover { border-color: var(--gold); background: #14144a; }
+    .add-cat-opt .opt-icon { font-size: 24px; }
+    #add-cat-cancel { background: transparent; border: none; color: rgba(255,255,255,.35); font-size: 12px; cursor: pointer; align-self: center; padding: 4px 10px; }
+    #add-cat-cancel:hover { color: rgba(255,255,255,.65); }
+
+    /* ── TOAST ── */
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(70px); background: #222; color: #fff; padding: 9px 18px; border-radius: 20px; font-size: 13px; transition: transform .3s; z-index: 999; pointer-events: none; }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── CONFIRM MODAL ── */
+    #confirm-modal { display: none; position: fixed; inset: 0; z-index: 300; align-items: center; justify-content: center; }
+    #confirm-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.72); }
+    #confirm-dialog { position: relative; background: var(--panel); border: 2px solid #7a2222; border-radius: 12px; padding: 22px 22px 18px; width: min(360px, 92vw); display: flex; flex-direction: column; gap: 12px; }
+    #confirm-title { font-size: 15px; font-weight: 700; color: var(--white); margin: 0; }
+    #confirm-msg { font-size: 13px; color: rgba(255,255,255,.6); line-height: 1.5; margin: 0; }
+    #confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    #confirm-cancel-btn { background: #1a1a50; border: 1px solid #334; border-radius: 6px; color: rgba(255,255,255,.7); font-size: 13px; padding: 7px 16px; cursor: pointer; }
+    #confirm-cancel-btn:hover { background: #22225a; }
+    #confirm-ok-btn { background: #7a2222; border: none; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
+    #confirm-ok-btn:hover { background: #9e3535; }
+
+    /* ── CATEGORY SELECTION MODE ── */
+    .cat-sel-check { display: none; width: 17px; height: 17px; cursor: pointer; accent-color: var(--red); flex-shrink: 0; }
+    #cat-list.cat-sel-mode .cat-sel-check { display: block; }
+    #cat-list.cat-sel-mode .del-cat-btn { display: none; }
+    #cat-del-sel-btn { background: #7a2222; color: #fff; border: none; }
+    #cat-del-sel-btn:hover { background: #9e3535; }
+
+    /* ── QUESTION SELECTION MODE ── */
+    .q-action-cell { display: flex; align-items: center; justify-content: center; }
+    .q-sel-check { display: none; width: 16px; height: 16px; cursor: pointer; accent-color: var(--red); }
+    .lib-cat-body.q-sel-mode .del-q-btn { display: none; }
+    .lib-cat-body.q-sel-mode .q-sel-check { display: block; }
+    .q-sel-controls { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
+    .q-sel-toggle { background: transparent; border: 1px dashed #445; border-radius: 5px; color: rgba(255,255,255,.4); font-size: 11px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+    .q-sel-toggle:hover { border-color: #667; color: rgba(255,255,255,.6); }
+    .q-del-sel-btn { display: none; background: #7a2222; border: none; border-radius: 5px; color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+    .q-del-sel-btn:hover { background: #9e3535; }
+    .q-del-sel-btn.visible { display: block; }
+
+    /* ── TIMER ── */
+    #h-timer { display: none; align-items: center; gap: 8px; margin-bottom: 10px; }
+    #h-timer svg { transform: rotate(-90deg); flex-shrink: 0; }
+    .h-timer-track { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 4; }
+    .h-timer-ring  { fill: none; stroke: var(--gold); stroke-width: 4; stroke-linecap: round;
+                     stroke-dasharray: 163.36; stroke-dashoffset: 0; }
+    .h-timer-ring.ans  { stroke: #ff9933; }
+    .h-timer-ring.lock { stroke: rgba(255,255,255,0.3); }
+    #h-timer-num  { font-family: Impact, sans-serif; font-size: 22px; min-width: 22px; }
+    #h-timer-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: .6; }
+
+    /* ── GAME ACTION ROW ── */
+    .action-row { display: flex; gap: 7px; flex-wrap: wrap; }
+
+    /* ── THEME PICKER ── */
+    #theme-btn { background: transparent; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; color: rgba(255,255,255,.45); padding: 3px 9px; cursor: pointer; font-size: 15px; line-height: 1; }
+    #theme-btn:hover { border-color: var(--gold); color: var(--gold); }
+    #theme-picker { display: none; position: fixed; right: 16px; top: 52px; background: #0a0a28; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px 14px; z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,.7); min-width: 280px; }
+    #theme-picker.open { display: block; }
+    .tp-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.35); margin-bottom: 10px; }
+    .tp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .tp-swatch { border-radius: 7px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color .15s, transform .1s; }
+    .tp-swatch:hover { transform: scale(1.05); border-color: rgba(255,255,255,.5); }
+    .tp-swatch.active { border-color: #fff; }
+    .tp-swatch .sw-bg { height: 32px; }
+    .tp-swatch .sw-accent { height: 6px; }
+    .tp-swatch .sw-label { font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: rgba(255,255,255,.5); text-align: center; padding: 3px 2px 4px; background: rgba(0,0,0,.5); }
+    .tp-swatch.active .sw-label { color: #fff; }
+    .tp-custom { margin-top: 12px; border-top: 1px solid rgba(255,255,255,.1); padding-top: 10px; }
+    .tp-custom-title { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.35); margin-bottom: 8px; }
+    .tp-color-row { display: flex; gap: 10px; }
+    .tp-color-item { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+    .tp-color-item label { font-size: 9px; color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: .5px; }
+    .tp-color-item input[type="color"] { width: 44px; height: 30px; border: 1px solid rgba(255,255,255,.2); border-radius: 5px; cursor: pointer; background: transparent; padding: 2px; }
+    #tp-custom-apply { margin-top: 9px; width: 100%; padding: 7px; background: var(--gold); color: #000; border: none; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; }
+    #tp-custom-apply:hover { filter: brightness(1.1); }
+
+    /* ── GEN CATEGORIES MODAL ── */
+    #gen-cats-modal { display: none; position: fixed; inset: 0; z-index: 250; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+    #gen-cats-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.72); }
+    #gen-cats-dialog { position: relative; background: var(--panel); border: 2px solid var(--gold); border-radius: 14px; padding: 24px 22px 20px; width: min(580px, 100%); display: flex; flex-direction: column; gap: 16px; z-index: 1; }
+    #gen-cats-dialog h2 { font-family: Impact, sans-serif; font-size: 17px; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; margin: 0; }
+    .gen-cats-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.4); margin-bottom: 2px; }
+    #gen-cats-theme-input { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; color: var(--white); font-size: 14px; padding: 10px 13px; outline: none; width: 100%; }
+    #gen-cats-theme-input:focus { border-color: var(--gold); }
+    .gen-cats-count-row { display: flex; gap: 8px; }
+    .gen-cats-count-btn { background: var(--dark); border: 1px solid var(--border); border-radius: 7px; color: rgba(255,255,255,.5); font-size: 15px; font-family: Impact, sans-serif; letter-spacing: 1px; padding: 8px 18px; cursor: pointer; transition: border-color .15s, color .15s; }
+    .gen-cats-count-btn.active { border-color: var(--gold); color: var(--gold); }
+    .gen-cats-count-btn:hover { border-color: #556; color: rgba(255,255,255,.7); }
+    .gen-cats-footer { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+    #gen-cats-cancel-btn { background: transparent; border: none; color: rgba(255,255,255,.35); font-size: 12px; cursor: pointer; padding: 6px 12px; }
+    #gen-cats-cancel-btn:hover { color: rgba(255,255,255,.65); }
+    #gen-cats-go-btn { background: var(--gold); border: none; border-radius: 7px; color: var(--dark); font-size: 13px; font-weight: 700; padding: 9px 20px; cursor: pointer; }
+    #gen-cats-go-btn:hover { filter: brightness(1.1); }
+    .gen-cats-loading { text-align: center; color: var(--gold); padding: 30px 16px; font-size: 14px; opacity: .8; }
+    .gen-cat-result { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+    .gen-cat-result-header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--dark); }
+    .gen-cat-result-header input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--green); cursor: pointer; flex-shrink: 0; }
+    .gen-cat-name-edit { flex: 1; background: transparent; border: none; color: var(--white); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; outline: none; padding: 2px 4px; border-radius: 3px; min-width: 0; }
+    .gen-cat-name-edit:focus { background: rgba(255,255,255,.06); }
+    .gen-cat-qs { padding: 6px 10px 8px; background: var(--panel2); display: flex; flex-direction: column; gap: 3px; }
+    .gen-cat-q-row { display: flex; gap: 8px; font-size: 11px; line-height: 1.5; }
+    .gen-cat-q-val { color: var(--gold); font-family: Impact, sans-serif; min-width: 38px; flex-shrink: 0; }
+    .gen-cat-q-text { color: rgba(255,255,255,.6); flex: 1; min-width: 0; }
+    #gen-cats-add-btn { background: var(--gold); border: none; border-radius: 7px; color: var(--dark); font-size: 13px; font-weight: 700; padding: 9px 20px; cursor: pointer; }
+    #gen-cats-add-btn:hover { filter: brightness(1.1); }
+    #gen-cats-add-btn:disabled { opacity: .4; cursor: default; filter: none; }
+    .gen-cats-err { color: #e05555; font-size: 13px; text-align: center; padding: 16px; }
+
+    /* ── SETTINGS PANEL ── */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .setting-row { display: flex; flex-direction: column; gap: 4px; }
+    .setting-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.4); }
+    .setting-val { font-size: 12px; color: var(--gold); font-family: Impact, sans-serif; letter-spacing: 1px; }
+    input[type="range"] { width: 100%; accent-color: var(--gold); cursor: pointer; }
+    .tog-row { display: flex; align-items: center; gap: 8px; }
+    .tog-row .setting-label { margin-bottom: 0; }
+
+    /* ── DD BADGE ── */
+    .dd-badge { background: var(--gold); color: #000; font-family: Impact, sans-serif; font-size: 9px;
+                letter-spacing: .5px; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
+
+    /* ── DAILY DOUBLE PHASE ── */
+    #daily-double-section { display: none; }
+
+    /* ── TIEBREAKER PHASE ── */
+    #tiebreaker-section { display: none; }
+
+    /* ── ROUND SELECTOR ── */
+    .round-pills { display: flex; gap: 3px; flex-shrink: 0; }
+    .round-pill { background: transparent; border: 1px solid #334; border-radius: 4px; color: rgba(255,255,255,.3); font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 2px 6px; cursor: pointer; transition: background .12s, color .12s, border-color .12s; white-space: nowrap; }
+    .round-pill:hover { border-color: #556; color: rgba(255,255,255,.6); }
+    .round-pill.active-r1 { background: #1a3a6a; border-color: #3a5aaa; color: #8ab0ff; }
+    .round-pill.active-r2 { background: #3a1a6a; border-color: #6a3aaa; color: #c080ff; }
+    .round-pill.active-fj { background: #5a3a0a; border-color: #c09a38; color: var(--gold); }
+
+    /* ── ROUND-OVER / FINAL SECTIONS ── */
+    #round-over-section, #final-wager-section, #final-question-section { display: none; }
+
+    .phase-card { background: var(--darker); border: 2px solid var(--gold); border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: center; }
+    .phase-card h2 { font-family: Impact, sans-serif; font-size: 22px; letter-spacing: 3px; color: var(--gold); margin-bottom: 6px; }
+    .phase-card p  { font-size: 13px; color: rgba(255,255,255,.5); margin-bottom: 16px; }
+
+    .wager-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .wager-row  { display: flex; align-items: center; gap: 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; }
+    .wager-name { flex: 1; font-weight: 600; font-size: 13px; }
+    .wager-score { font-family: monospace; color: rgba(255,255,255,.4); font-size: 12px; min-width: 50px; text-align: right; }
+    .wager-status { font-size: 12px; min-width: 64px; text-align: right; }
+    .wager-status.done { color: #5acc80; }
+    .wager-status.wait { color: rgba(255,255,255,.3); }
+    .wager-amount { font-family: monospace; color: var(--gold); font-size: 13px; min-width: 64px; text-align: right; }
+
+    .fj-judge-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .fj-judge-row  { display: flex; align-items: center; gap: 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; min-width: 0; }
+    .fj-judge-row.judged { opacity: .45; }
+    .fj-judge-name  { flex: 1; font-weight: 600; font-size: 13px; }
+    .fj-judge-wager { font-family: monospace; color: var(--gold); font-size: 12px; min-width: 54px; text-align: right; }
+    .fj-judge-btns  { display: flex; gap: 5px; }
+
+    .fj-q-box { background: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 14px; text-align: left; }
+    .fj-q-cat { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); opacity: .7; margin-bottom: 5px; }
+    .fj-q-text { font-size: 15px; line-height: 1.5; margin-bottom: 10px; }
+    .fj-q-answer-box { background: #1a1a50; border-left: 3px solid var(--gold); padding: 7px 10px; border-radius: 0 4px 4px 0; }
+    .fj-q-answer-box .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; opacity: .5; display: block; margin-bottom: 2px; }
+    .fj-q-answer-box .val { color: var(--gold); font-weight: bold; }
+    .fj-q-answer-box .val.masked { color: transparent; background: var(--gold); border-radius: 3px; user-select: none; cursor: pointer; }
+
+    /* ── HISTORY MODAL ── */
+    #history-modal { display: none; position: fixed; inset: 0; z-index: 300; align-items: center; justify-content: center; padding: 24px 16px; }
+    #history-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.72); }
+    #history-dialog { position: relative; background: var(--panel); border: 2px solid var(--gold); border-radius: 14px; padding: 22px 20px 18px; width: min(560px, 100%); max-height: 80vh; display: flex; flex-direction: column; gap: 14px; z-index: 1; }
+    #history-dialog h2 { font-family: Impact, sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; margin: 0; flex-shrink: 0; }
+    #history-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+    .hist-row { background: var(--dark); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; transition: border-color .15s; }
+    .hist-row:hover { border-color: #4a4a80; }
+    .hist-row-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+    .hist-date { font-size: 12px; color: rgba(255,255,255,.45); flex-shrink: 0; min-width: 140px; }
+    .hist-winner { flex: 1; font-weight: 700; font-size: 14px; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-meta { font-size: 11px; color: rgba(255,255,255,.4); white-space: nowrap; flex-shrink: 0; }
+    .hist-chevron { font-size: 10px; opacity: .4; flex-shrink: 0; transition: transform .2s; }
+    .hist-chevron.open { transform: rotate(90deg); }
+    .hist-details { display: none; padding: 0 14px 12px; border-top: 1px solid var(--border); }
+    .hist-details.open { display: block; }
+    .hist-detail-scores { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+    .hist-detail-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .hist-detail-name { flex: 1; }
+    .hist-detail-score { font-family: monospace; color: var(--gold); }
+    .hist-cats { font-size: 11px; color: rgba(255,255,255,.3); margin-top: 8px; line-height: 1.5; }
+    .hist-empty { font-size: 13px; color: rgba(255,255,255,.35); font-style: italic; text-align: center; padding: 24px 0; }
+    #history-footer { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    #clear-history-btn { background: transparent; border: 1px solid #7a2222; border-radius: 6px; color: #cc4444; font-size: 12px; padding: 6px 12px; cursor: pointer; }
+    #clear-history-btn:hover { background: rgba(122,34,34,.25); }
+    #history-close-btn { background: transparent; border: none; color: rgba(255,255,255,.35); font-size: 12px; cursor: pointer; padding: 6px 12px; }
+    #history-close-btn:hover { color: rgba(255,255,255,.65); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>TRIVIA NIGHT — HOST</h1>
+  <span class="phase-badge" id="phase-badge">LOBBY</span>
+  <button id="history-btn" title="Game History" style="background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:6px;color:rgba(255,255,255,.45);padding:3px 9px;cursor:pointer;font-size:15px;line-height:1">📜</button>
+  <button id="theme-btn" title="Color scheme">🎨</button>
+</header>
+
+<div id="theme-picker">
+  <div class="tp-title">Color Scheme</div>
+  <div class="tp-grid" id="tp-grid"></div>
+  <div class="tp-custom">
+    <div class="tp-custom-title">Custom Theme</div>
+    <div class="tp-color-row">
+      <div class="tp-color-item">
+        <label for="tp-bg-color">Background</label>
+        <input type="color" id="tp-bg-color" value="#0a0a3a">
+      </div>
+      <div class="tp-color-item">
+        <label for="tp-card-color">Cards</label>
+        <input type="color" id="tp-card-color" value="#16166a">
+      </div>
+      <div class="tp-color-item">
+        <label for="tp-accent-color">Accent</label>
+        <input type="color" id="tp-accent-color" value="#c09a38">
+      </div>
+    </div>
+    <button id="tp-custom-apply">Apply Custom</button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ── LEFT PANEL ── -->
+  <div class="left">
+    <div class="panel-body" style="flex:1;overflow-y:auto">
+
+      <!-- QR + PIN (lobby only) -->
+      <div class="section" id="url-section">
+        <div class="section-title">Scan to Join</div>
+        <div style="text-align:center">
+          <img id="qr-img" src="" alt="QR" style="display:none;width:150px;height:150px;border-radius:6px">
+        </div>
+        <div style="margin-top:14px;text-align:center">
+          <div class="section-title" style="margin-bottom:4px">Host PIN</div>
+          <div id="host-pin-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
+        </div>
+      </div>
+
+      <!-- Players -->
+      <div class="section">
+        <div class="section-title">Players</div>
+        <div id="players-list"><div style="opacity:.4;font-style:italic;font-size:13px">No players yet…</div></div>
+      </div>
+
+    </div>
+
+    <!-- Fixed bottom controls -->
+    <div style="padding:14px;border-top:1px solid var(--border);background:var(--panel)">
+      <div id="lobby-actions">
+        <button class="btn btn-gold btn-full" id="start-btn" style="font-size:15px;padding:13px">START GAME</button>
+        <button class="btn btn-gray btn-full" id="randomize-btn" style="margin-top:8px;font-size:13px">🎲 Random Game Setup</button>
+        <div id="randomize-summary" style="display:none;margin-top:8px;font-size:11px;text-align:center;color:rgba(255,255,255,.45);line-height:1.6"></div>
+      </div>
+      <div id="game-actions" style="display:none">
+        <div class="action-row">
+          <button class="btn btn-gray" id="skip-btn" style="display:none">Skip Question</button>
+          <button class="btn btn-gray" id="reset-btn">Reset Game</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="right">
+    <div class="panel-body">
+
+      <!-- Timer (question phase) -->
+      <div id="h-timer">
+        <div style="position:relative;width:54px;height:54px;flex-shrink:0">
+          <svg viewBox="0 0 60 60" width="54" height="54">
+            <circle class="h-timer-track" cx="30" cy="30" r="26"/>
+            <circle class="h-timer-ring" id="h-timer-ring" cx="30" cy="30" r="26"/>
+          </svg>
+          <span id="h-timer-num" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Impact,sans-serif;font-size:18px">30</span>
+        </div>
+        <div>
+          <div id="h-timer-label">Waiting for buzz</div>
+        </div>
+      </div>
+
+      <!-- Judge (question phase) -->
+      <div id="judge-section" style="display:none">
+        <div id="judge-panel">
+          <h3>Who buzzed in?</h3>
+          <div id="judge-player-name">—</div>
+          <div id="judge-buttons">
+            <button class="btn btn-green" id="correct-btn">CORRECT ✓</button>
+            <button class="btn btn-red"   id="wrong-btn">WRONG ✗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current question (question phase) -->
+      <div id="current-q-section" style="display:none">
+        <div class="section-title">Current Question</div>
+        <div class="q-box">
+          <div class="q-meta" id="cq-meta"></div>
+          <div class="q-text" id="cq-text"></div>
+          <div class="q-answer-box">
+            <span class="lbl">Answer</span>
+            <span class="val masked" id="cq-answer"></span>
+            <button class="q-reveal-btn" id="reveal-btn">👁 Reveal answer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily Double phase -->
+      <div id="daily-double-section">
+        <div class="phase-card">
+          <h2>DAILY DOUBLE!</h2>
+          <p id="dd-player-name" style="font-size:18px;color:var(--white);margin-bottom:4px"></p>
+          <p>is placing their wager…</p>
+        </div>
+        <div class="q-box" style="margin-top:12px">
+          <div class="q-meta" id="dd-q-meta"></div>
+          <div class="q-text" id="dd-q-text"></div>
+          <div class="q-answer-box">
+            <span class="lbl">Answer</span>
+            <span class="val masked" id="dd-q-answer"></span>
+            <button class="q-reveal-btn" id="dd-reveal-btn">👁 Reveal answer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tiebreaker phase -->
+      <div id="tiebreaker-section">
+        <div class="phase-card" style="border-color:#ff9933">
+          <h2 style="color:#ff9933">TIEBREAKER!</h2>
+          <p id="tiebreaker-players-label"></p>
+        </div>
+      </div>
+
+      <!-- Game settings (lobby only) -->
+      <div id="settings-section">
+        <div class="section-title" style="margin-bottom:10px">Game Settings</div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <span class="setting-label">Buzz window <span class="setting-val" id="buzz-time-val">30s</span></span>
+            <input type="range" id="buzz-time-range" min="10" max="60" step="5" value="30">
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Answer time <span class="setting-val" id="answer-time-val">10s</span></span>
+            <input type="range" id="answer-time-range" min="5" max="30" step="5" value="10">
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+          <div class="tog-row">
+            <label class="tog" title="Wrong answer locks player out of current question">
+              <input type="checkbox" id="lockout-toggle">
+              <span class="tog-track"></span>
+            </label>
+            <span class="setting-label">Wrong answer lockout</span>
+          </div>
+          <div class="tog-row">
+            <label class="tog" title="Randomly assign Daily Doubles">
+              <input type="checkbox" id="dd-toggle" checked>
+              <span class="tog-track"></span>
+            </label>
+            <span class="setting-label">Daily Doubles</span>
+          </div>
+          <div class="tog-row">
+            <label class="tog" title="Players form teams and compete by team score">
+              <input type="checkbox" id="team-mode-toggle">
+              <span class="tog-track"></span>
+            </label>
+            <span class="setting-label">Team Mode</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Round over (between rounds) -->
+      <div id="round-over-section">
+        <div class="phase-card">
+          <h2>ROUND 1 COMPLETE</h2>
+          <p>Round 2 is ready. Start when players are set.</p>
+          <button class="btn btn-gold" id="start-round2-btn" style="font-size:15px;padding:13px 28px">START ROUND 2 →</button>
+        </div>
+        <div class="section-title" style="margin-bottom:8px">Scores After Round 1</div>
+        <div id="round-over-scores"></div>
+      </div>
+
+      <!-- Final Jeopardy – wager phase -->
+      <div id="final-wager-section">
+        <div class="phase-card">
+          <h2>FINAL JEOPARDY</h2>
+          <p id="fj-category-name" style="font-size:16px;color:var(--gold);font-family:Impact,sans-serif;letter-spacing:2px"></p>
+          <p>Players are placing their wagers…</p>
+          <button class="btn btn-outline btn-sm" id="force-reveal-btn">Force Reveal Question</button>
+        </div>
+        <div class="section-title" style="margin-bottom:8px">Wager Status</div>
+        <div class="wager-rows" id="wager-rows"></div>
+      </div>
+
+      <!-- Final Jeopardy – question phase -->
+      <div id="final-question-section">
+        <div class="fj-q-box">
+          <div class="fj-q-cat" id="fj-q-cat"></div>
+          <div class="fj-q-text" id="fj-q-text"></div>
+          <div class="fj-q-answer-box">
+            <span class="lbl">Answer</span>
+            <span class="val masked" id="fj-q-answer"></span>
+            <button class="q-reveal-btn" id="fj-reveal-btn">👁 Reveal answer</button>
+          </div>
+        </div>
+        <div class="section-title" style="margin-bottom:8px">Judge Final Answers</div>
+        <div class="fj-judge-rows" id="fj-judge-rows"></div>
+      </div>
+
+      <!-- Library manager (lobby phase) -->
+      <div id="library-section">
+        <div class="lib-toolbar">
+          <span class="section-title">Question Library</span>
+          <span class="active-count" id="active-count">0 of 0 in game</span>
+          <div class="lib-toolbar-spacer"></div>
+          <button class="btn btn-gray btn-sm" id="cat-sel-btn">Select</button>
+          <button class="btn btn-sm" id="cat-del-sel-btn" style="display:none">🗑 Delete (0)</button>
+          <button class="btn btn-gray btn-sm" id="show-answers-btn">👁 Answers</button>
+          <button class="btn btn-gray btn-sm" id="export-lib-btn">⬇ Export</button>
+          <label class="btn btn-gray btn-sm" style="cursor:pointer" title="Import library JSON">⬆ Import<input type="file" id="import-lib-input" accept=".json" style="display:none"></label>
+          <button class="btn btn-gray btn-sm" id="reset-lib-btn">Deselect All</button>
+          <button class="btn btn-sm" id="delete-lib-btn" style="background:transparent;border:1px solid #882828;color:#cc4444">🗑 Delete All</button>
+          <button class="btn btn-sm" id="gen-cats-btn" style="background:#1a1a60;border:1px solid #556;color:rgba(255,255,255,.7)">✨ Generate</button>
+          <button class="btn btn-gold btn-sm" id="add-cat-btn">+ Category</button>
+        </div>
+        <div id="cat-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="add-cat-modal">
+  <div id="add-cat-backdrop"></div>
+  <div id="add-cat-dialog">
+    <h2>New Category</h2>
+    <input id="add-cat-name-input" type="text" placeholder="Category name…" maxlength="50" autocomplete="off">
+    <div class="add-cat-how">How do you want to add questions?</div>
+    <div id="add-cat-options">
+      <button class="add-cat-opt" id="add-cat-manual">
+        <span class="opt-icon">✏️</span>Enter Manually
+      </button>
+      <button class="add-cat-opt" id="add-cat-ai">
+        <span class="opt-icon">✨</span>Generate with AI
+      </button>
+    </div>
+    <button id="add-cat-cancel">Cancel</button>
+  </div>
+</div>
+
+<div id="confirm-modal">
+  <div id="confirm-backdrop"></div>
+  <div id="confirm-dialog">
+    <div id="confirm-title"></div>
+    <div id="confirm-msg"></div>
+    <div id="confirm-actions">
+      <button id="confirm-cancel-btn">Cancel</button>
+      <button id="confirm-ok-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="gen-cats-modal">
+  <div id="gen-cats-backdrop"></div>
+  <div id="gen-cats-dialog"></div>
+</div>
+
+<div id="csv-modal" style="display:none;position:fixed;inset:0;z-index:250;align-items:center;justify-content:center">
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,.72)" id="csv-backdrop"></div>
+  <div style="position:relative;background:var(--panel);border:2px solid var(--gold);border-radius:14px;padding:24px 22px 20px;width:min(520px,96vw);display:flex;flex-direction:column;gap:14px;z-index:1">
+    <h2 style="font-family:Impact,sans-serif;font-size:17px;letter-spacing:2px;color:var(--gold);text-transform:uppercase">Import CSV Questions</h2>
+    <div style="font-size:12px;color:rgba(255,255,255,.45);line-height:1.6">
+      One question per line. Format: <code style="color:var(--gold)">value, question text, answer</code><br>
+      If value is omitted, questions are numbered 200, 400, 600…
+    </div>
+    <textarea id="csv-input" rows="10" placeholder="200, This planet has the most moons., Saturn&#10;400, The speed of light in km/s., 299,792" style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:7px;color:var(--white);padding:10px 12px;font-size:13px;font-family:monospace;outline:none;resize:vertical"></textarea>
+    <div style="font-size:12px;color:rgba(255,255,255,.35)" id="csv-preview"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="csv-cancel-btn" style="background:transparent;border:none;color:rgba(255,255,255,.35);font-size:12px;cursor:pointer;padding:6px 12px">Cancel</button>
+      <button id="csv-add-btn" class="btn btn-gold btn-sm">Add Questions</button>
+    </div>
+  </div>
+</div>
+
+<div id="history-modal">
+  <div id="history-backdrop"></div>
+  <div id="history-dialog">
+    <h2>📜 Game History</h2>
+    <div id="history-list"></div>
+    <div id="history-footer">
+      <button id="clear-history-btn">🗑 Clear History</button>
+      <button id="history-close-btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  let gameState = null;
+  let libState  = null;
+
+  // ── Confirm modal ──────────────────────────────────────────────────────────
+
+  function showConfirm(title, msg, onConfirm) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-msg').textContent   = msg;
+    document.getElementById('confirm-modal').style.display = 'flex';
+    function close() { document.getElementById('confirm-modal').style.display = 'none'; }
+    document.getElementById('confirm-ok-btn').onclick     = () => { close(); onConfirm(); };
+    document.getElementById('confirm-cancel-btn').onclick  = close;
+    document.getElementById('confirm-backdrop').onclick    = close;
+  }
+
+  // ── Theme picker ──────────────────────────────────────────────────────────
+
+  const THEMES = [
+    { id: 'classic',  label: 'Classic',  main: '#1a28b0', accent: '#c09a38' },
+    { id: 'midnight', label: 'Midnight', main: '#06060e', accent: '#b8943a' },
+    { id: 'retro',    label: 'Retro',    main: '#0606e0', accent: '#f0c800' },
+    { id: 'forest',   label: 'Forest',   main: '#071a0e', accent: '#c8a828' },
+    { id: 'crimson',  label: 'Crimson',  main: '#1a0808', accent: '#c09a38' },
+    { id: 'ocean',    label: 'Ocean',    main: '#052028', accent: '#44c4b8' },
+    { id: 'violet',   label: 'Violet',   main: '#1a0838', accent: '#d4a830' },
+  ];
+
+  const CUSTOM_VARS = ['--blue','--dark','--darker','--used','--gold'];
+
+  function darkenHex(hex, pct) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    const f = 1 - pct;
+    return '#' + [r,g,b].map(c => Math.max(0,Math.round(c*f)).toString(16).padStart(2,'0')).join('');
+  }
+
+  let activeTheme = localStorage.getItem('trivia_theme') || 'classic';
+
+  function buildThemePicker() {
+    const grid = document.getElementById('tp-grid');
+    grid.innerHTML = THEMES.map(t => `
+      <div class="tp-swatch${t.id === activeTheme ? ' active' : ''}" data-theme-id="${t.id}" title="${t.label}">
+        <div class="sw-bg" style="background:${t.main}"></div>
+        <div class="sw-accent" style="background:${t.accent}"></div>
+        <div class="sw-label">${t.label}</div>
+      </div>
+    `).join('');
+    grid.querySelectorAll('.tp-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        applyTheme(sw.dataset.themeId, true);
+        document.getElementById('theme-picker').classList.remove('open');
+      });
+    });
+    // Restore saved custom color inputs
+    const saved = localStorage.getItem('trivia_custom_vars');
+    if (saved) {
+      const v = JSON.parse(saved);
+      if (v['--blue'])  document.getElementById('tp-bg-color').value   = v['--blue'];
+      if (v['--dark'])  document.getElementById('tp-card-color').value  = v['--dark'];
+      if (v['--gold'])  document.getElementById('tp-accent-color').value = v['--gold'];
+    }
+  }
+
+  function applyTheme(id, emit) {
+    activeTheme = id;
+    CUSTOM_VARS.forEach(v => document.body.style.removeProperty(v));
+    document.body.dataset.theme = id === 'classic' ? '' : id;
+    localStorage.setItem('trivia_theme', id);
+    document.querySelectorAll('.tp-swatch').forEach(sw =>
+      sw.classList.toggle('active', sw.dataset.themeId === id));
+    if (emit) socket.emit('set-theme', { theme: id });
+  }
+
+  function applyCustomTheme(vars, emit) {
+    activeTheme = 'custom';
+    CUSTOM_VARS.forEach(v => document.body.style.removeProperty(v));
+    document.body.dataset.theme = '';
+    for (const [k, v] of Object.entries(vars)) document.body.style.setProperty(k, v);
+    localStorage.setItem('trivia_theme', 'custom');
+    localStorage.setItem('trivia_custom_vars', JSON.stringify(vars));
+    document.querySelectorAll('.tp-swatch').forEach(sw => sw.classList.remove('active'));
+    if (emit) socket.emit('set-custom-theme', { vars });
+  }
+
+  document.getElementById('tp-custom-apply').addEventListener('click', () => {
+    const bg     = document.getElementById('tp-bg-color').value;
+    const cards  = document.getElementById('tp-card-color').value;
+    const accent = document.getElementById('tp-accent-color').value;
+    const vars = {
+      '--blue':   bg,
+      '--dark':   cards,
+      '--darker': darkenHex(cards, 0.3),
+      '--used':   darkenHex(bg, 0.5),
+      '--gold':   accent,
+    };
+    applyCustomTheme(vars, true);
+    document.getElementById('theme-picker').classList.remove('open');
+  });
+
+  document.getElementById('theme-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    buildThemePicker();
+    document.getElementById('theme-picker').classList.toggle('open');
+  });
+  document.addEventListener('click', () => {
+    document.getElementById('theme-picker').classList.remove('open');
+  });
+  document.getElementById('theme-picker').addEventListener('click', e => e.stopPropagation());
+
+  // Init — restore custom theme if it was active
+  if (activeTheme === 'custom') {
+    const saved = localStorage.getItem('trivia_custom_vars');
+    if (saved) applyCustomTheme(JSON.parse(saved), false);
+    else applyTheme('classic', false);
+  } else {
+    applyTheme(activeTheme, false);
+  }
+
+  // ── Category selection ─────────────────────────────────────────────────────
+
+  const selectedCatIds = new Set();
+  let catSelMode = false;
+
+  function updateCatSelToolbar() {
+    const delBtn = document.getElementById('cat-del-sel-btn');
+    delBtn.style.display = (catSelMode && selectedCatIds.size > 0) ? 'inline-flex' : 'none';
+    if (selectedCatIds.size > 0) delBtn.textContent = `🗑 Delete (${selectedCatIds.size})`;
+  }
+
+  function updateQDelBtn(catId, body) {
+    const count = body.querySelectorAll('.q-sel-check:checked').length;
+    const btn = body.querySelector('.q-del-sel-btn');
+    if (!btn) return;
+    btn.classList.toggle('visible', count > 0);
+    if (count > 0) btn.textContent = `🗑 Delete ${count} question${count !== 1 ? 's' : ''}`;
+  }
+
+  // ── Generate Categories ────────────────────────────────────────────────────
+
+  let genCatsCount = 3;
+
+  function openGenCatsModal() {
+    genCatsCount = 3;
+    showGenCatsRequest();
+    document.getElementById('gen-cats-modal').style.display = 'flex';
+  }
+
+  function closeGenCatsModal() {
+    document.getElementById('gen-cats-modal').style.display = 'none';
+  }
+
+  function showGenCatsRequest() {
+    const dlg = document.getElementById('gen-cats-dialog');
+    dlg.innerHTML = `
+      <h2>✨ Generate Categories</h2>
+      <div>
+        <div class="gen-cats-label">Theme <span style="opacity:.5">(optional)</span></div>
+        <input id="gen-cats-theme-input" type="text" placeholder="e.g. 80s movies, science, world geography…" maxlength="100" autocomplete="off">
+      </div>
+      <div>
+        <div class="gen-cats-label">How many categories?</div>
+        <div class="gen-cats-count-row">
+          ${[2,3,4,5,6].map(n => `<button class="gen-cats-count-btn${n === genCatsCount ? ' active' : ''}" data-n="${n}">${n}</button>`).join('')}
+        </div>
+      </div>
+      <div class="gen-cats-footer">
+        <button id="gen-cats-cancel-btn">Cancel</button>
+        <button id="gen-cats-go-btn">✨ Generate</button>
+      </div>
+    `;
+    document.getElementById('gen-cats-theme-input').focus();
+    dlg.querySelectorAll('.gen-cats-count-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        genCatsCount = +btn.dataset.n;
+        dlg.querySelectorAll('.gen-cats-count-btn').forEach(b => b.classList.toggle('active', b === btn));
+      });
+    });
+    document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
+    document.getElementById('gen-cats-go-btn').addEventListener('click', () => {
+      const theme = document.getElementById('gen-cats-theme-input').value.trim();
+      showGenCatsLoading();
+      socket.emit('generate-categories', { theme, count: genCatsCount });
+    });
+    document.getElementById('gen-cats-theme-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('gen-cats-go-btn').click();
+      if (e.key === 'Escape') closeGenCatsModal();
+    });
+  }
+
+  function showGenCatsLoading() {
+    document.getElementById('gen-cats-dialog').innerHTML = `
+      <h2>✨ Generate Categories</h2>
+      <div class="gen-cats-loading">Generating ${genCatsCount} categories… this may take a moment.</div>
+    `;
+  }
+
+  function showGenCatsResults(categories) {
+    const dlg = document.getElementById('gen-cats-dialog');
+    dlg.innerHTML = `
+      <h2>Select Categories to Add</h2>
+      <div id="gen-cats-list">
+        ${categories.map((cat, i) => `
+          <div class="gen-cat-result" data-idx="${i}">
+            <div class="gen-cat-result-header">
+              <input type="checkbox" class="gen-cat-check" data-idx="${i}" checked>
+              <input type="text" class="gen-cat-name-edit" value="${esc(cat.name)}" data-idx="${i}">
+            </div>
+            <div class="gen-cat-qs">
+              ${(cat.questions || []).map(q => `
+                <div class="gen-cat-q-row">
+                  <span class="gen-cat-q-val">$${q.value}</span>
+                  <span class="gen-cat-q-text">${esc(q.question)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="gen-cats-footer">
+        <button id="gen-cats-back-btn" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:12px;cursor:pointer;padding:6px 12px">← Back</button>
+        <button id="gen-cats-add-btn">Add Selected (${categories.length})</button>
+      </div>
+    `;
+    dlg._categories = categories;
+
+    const updateAddBtn = () => {
+      const n = dlg.querySelectorAll('.gen-cat-check:checked').length;
+      const btn = document.getElementById('gen-cats-add-btn');
+      btn.textContent = `Add Selected (${n})`;
+      btn.disabled = n === 0;
+    };
+    dlg.querySelectorAll('.gen-cat-check').forEach(cb => cb.addEventListener('change', updateAddBtn));
+
+    document.getElementById('gen-cats-back-btn').addEventListener('click', showGenCatsRequest);
+    document.getElementById('gen-cats-add-btn').addEventListener('click', () => {
+      const selected = [];
+      dlg.querySelectorAll('.gen-cat-check:checked').forEach(cb => {
+        const idx = +cb.dataset.idx;
+        const nameInput = dlg.querySelector(`.gen-cat-name-edit[data-idx="${idx}"]`);
+        selected.push({
+          name: (nameInput?.value || dlg._categories[idx].name).trim(),
+          questions: dlg._categories[idx].questions
+        });
+      });
+      if (selected.length === 0) return;
+      socket.emit('add-generated-categories', { categories: selected });
+      closeGenCatsModal();
+    });
+  }
+
+  socket.on('gen-categories-result', ({ categories }) => {
+    if (!Array.isArray(categories) || categories.length === 0) {
+      showGenCatsError('No categories were returned. Try again.');
+      return;
+    }
+    showGenCatsResults(categories);
+  });
+
+  socket.on('gen-categories-error', ({ message }) => showGenCatsError(message));
+
+  function showGenCatsError(msg) {
+    const dlg = document.getElementById('gen-cats-dialog');
+    dlg.innerHTML = `
+      <h2>✨ Generate Categories</h2>
+      <div class="gen-cats-err">⚠ ${esc(msg)}</div>
+      <div class="gen-cats-footer">
+        <button id="gen-cats-cancel-btn">Close</button>
+        <button id="gen-cats-go-btn">Try Again</button>
+      </div>
+    `;
+    document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
+    document.getElementById('gen-cats-go-btn').addEventListener('click', showGenCatsRequest);
+  }
+
+  document.getElementById('gen-cats-backdrop').addEventListener('click', closeGenCatsModal);
+
+  // ── Connect ───────────────────────────────────────────────────────────────
+
+  socket.on('connect', () => socket.emit('join-host'));
+
+  socket.on('player-url', ({ qr, pin }) => {
+    const img = document.getElementById('qr-img');
+    if (qr) { img.src = qr; img.style.display = 'block'; } else img.style.display = 'none';
+    if (pin) document.getElementById('host-pin-display').textContent = pin;
+  });
+
+  let hTimerInterval = null;
+  let hActiveEndsAt  = null;
+
+  function hTickTimer() {
+    if (!hActiveEndsAt) return;
+    const type  = gameState?.timerType;
+    const buzzMs   = (gameState?.settings?.buzzTime   || 30) * 1000;
+    const answerMs = (gameState?.settings?.answerTime || 10) * 1000;
+    const total = type === 'answer' ? answerMs : type === 'lock' ? 8000 : buzzMs;
+    const remaining = Math.max(0, hActiveEndsAt - Date.now());
+    const pct = remaining / total;
+    const secs = Math.ceil(remaining / 1000);
+    document.getElementById('h-timer-ring').style.strokeDashoffset = 163.36 * (1 - pct);
+    document.getElementById('h-timer-num').textContent = secs;
+    document.getElementById('h-timer-ring').className = 'h-timer-ring' + (type === 'answer' ? ' ans' : type === 'lock' ? ' lock' : '');
+    document.getElementById('h-timer-label').textContent =
+      type === 'answer' ? 'Time to answer' : type === 'lock' ? 'Buzz opens in…' : 'Waiting for buzz';
+    if (remaining <= 0) { clearInterval(hTimerInterval); hTimerInterval = null; }
+  }
+
+  function hSyncTimer() {
+    const endsAt = gameState?.timerEndsAt ?? null;
+    if (endsAt !== hActiveEndsAt) {
+      clearInterval(hTimerInterval); hTimerInterval = null;
+      hActiveEndsAt = endsAt;
+      if (endsAt && gameState?.phase === 'question') {
+        hTickTimer();
+        hTimerInterval = setInterval(hTickTimer, 100);
+        document.getElementById('h-timer').style.display = 'flex';
+      } else {
+        document.getElementById('h-timer').style.display = 'none';
+      }
+    }
+  }
+
+  socket.on('host-state', s => {
+    gameState = s;
+    if (s.theme) applyTheme(s.theme, false);
+    renderGame();
+  });
+  socket.on('library-state', s => { libState = s; renderLibrary(); });
+  socket.on('game-error', msg => toast(msg));
+
+  socket.on('generate-error', ({ catId, message }) => {
+    const panel = document.getElementById(`gen-panel-${catId}`);
+    if (panel) panel.innerHTML = `<div class="gen-loading" style="color:#ff6b6b">${esc(message)}</div>`;
+    else toast(message);
+  });
+
+  socket.on('generated-questions', ({ catId, questions }) => {
+    const panel = document.getElementById(`gen-panel-${catId}`);
+    if (!panel) return;
+    panel._questions = questions;
+    panel.innerHTML = `
+      <div class="gen-header">
+        <span>✨ AI-generated — select to add</span>
+        <button class="btn-icon" id="gen-dismiss-${catId}" title="Dismiss">✕</button>
+      </div>
+      ${questions.map((q, i) => `
+        <label class="gen-q-item">
+          <input type="checkbox" class="gen-q-check" data-idx="${i}" checked>
+          <span class="gen-q-val">$${q.value}</span>
+          <span class="gen-q-content">
+            <span class="gen-q-text">${esc(q.question)}</span>
+            <span class="gen-q-ans">A: ${esc(q.answer)}</span>
+          </span>
+        </label>
+      `).join('')}
+      <div class="gen-actions">
+        <button class="btn btn-gold btn-sm" id="gen-add-${catId}">Add Selected</button>
+        <button class="btn btn-gray btn-sm" id="gen-cancel-${catId}">Dismiss</button>
+      </div>
+    `;
+    document.getElementById(`gen-dismiss-${catId}`).addEventListener('click', () => panel.remove());
+    document.getElementById(`gen-cancel-${catId}`).addEventListener('click', () => panel.remove());
+    document.getElementById(`gen-add-${catId}`).addEventListener('click', () => {
+      const selected = [];
+      panel.querySelectorAll('.gen-q-check').forEach(cb => {
+        if (cb.checked) selected.push(panel._questions[+cb.dataset.idx]);
+      });
+      if (selected.length) socket.emit('add-generated-questions', { catId, questions: selected });
+      panel.remove();
+    });
+  });
+
+  // ── Game rendering ────────────────────────────────────────────────────────
+
+  function renderGame() {
+    if (!gameState) return;
+    const phase  = gameState.phase;
+    const inGame = phase !== 'lobby';
+
+    document.getElementById('phase-badge').textContent = phase.replace(/-/g, ' ').toUpperCase();
+    document.getElementById('lobby-actions').style.display   = inGame ? 'none' : 'block';
+    if (inGame) document.getElementById('randomize-summary').style.display = 'none';
+    document.getElementById('game-actions').style.display    = inGame ? 'block' : 'none';
+    document.getElementById('url-section').style.display     = inGame ? 'none' : 'block';
+    document.getElementById('library-section').style.display = inGame ? 'none' : 'block';
+    document.getElementById('skip-btn').style.display        = phase === 'question' ? 'inline-flex' : 'none';
+
+    document.getElementById('settings-section').style.display        = inGame ? 'none' : 'block';
+    document.getElementById('round-over-section').style.display      = phase === 'round-over'      ? 'block' : 'none';
+    document.getElementById('final-wager-section').style.display     = phase === 'final-wager'     ? 'block' : 'none';
+    document.getElementById('final-question-section').style.display  = phase === 'final-question'  ? 'block' : 'none';
+    document.getElementById('daily-double-section').style.display    = phase === 'daily-double'    ? 'block' : 'none';
+    document.getElementById('tiebreaker-section').style.display      = phase === 'tiebreaker'      ? 'block' : 'none';
+
+    renderPlayers();
+
+    if (phase === 'question') {
+      renderCurrentQuestion();
+    } else {
+      document.getElementById('current-q-section').style.display = 'none';
+      document.getElementById('judge-section').style.display     = 'none';
+      hSyncTimer();
+    }
+
+    if (phase === 'round-over')     renderRoundOver();
+    if (phase === 'final-wager')    renderFinalWager();
+    if (phase === 'final-question') renderFinalQuestion();
+    if (phase === 'daily-double')   renderDailyDouble();
+    if (phase === 'tiebreaker')     renderTiebreaker();
+    if (!inGame) syncSettingsUI();
+
+    if (!inGame && libState) renderLibrary();
+  }
+
+  function renderRoundOver() {
+    const scores = document.getElementById('round-over-scores');
+    const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
+    const items = isTeam ? gameState.teams : gameState.players;
+    scores.innerHTML = items
+      .slice().sort((a, b) => b.score - a.score)
+      .map(item => `
+        <div class="player-row">
+          <span class="player-name">${esc(item.name)}</span>
+          <span class="player-score">${fmt(item.score)}</span>
+        </div>
+      `).join('');
+  }
+
+  function renderFinalWager() {
+    const fq = gameState.finalQuestion;
+    if (fq) document.getElementById('fj-category-name').textContent = fq.categoryName;
+    const rows = document.getElementById('wager-rows');
+    const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
+    const items = isTeam ? gameState.teams : gameState.players;
+    rows.innerHTML = items.map(item => {
+      const wagered = gameState.finalWagers[item.id] !== undefined;
+      return `
+        <div class="wager-row">
+          <span class="wager-name">${esc(item.name)}</span>
+          <span class="wager-score">${fmt(item.score)}</span>
+          <span class="wager-status ${wagered ? 'done' : 'wait'}">${wagered ? 'Wagered ✓' : 'Waiting…'}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderDailyDouble() {
+    const q = gameState.currentQuestion;
+    const p = gameState.settings?.teamMode
+      ? gameState.teams?.[gameState.currentPlayerIndex]
+      : gameState.players[gameState.currentPlayerIndex];
+    document.getElementById('dd-player-name').textContent = p?.name ?? '';
+    document.getElementById('dd-q-meta').textContent = `${q?.categoryName} — $${q?.value}`;
+    document.getElementById('dd-q-text').textContent = q?.question ?? '';
+    document.getElementById('dd-q-answer').textContent = gameState.currentQuestion?.answer ?? '';
+    document.getElementById('dd-q-answer').classList.add('masked');
+    document.getElementById('dd-reveal-btn').textContent = '👁 Reveal answer';
+  }
+
+  function renderTiebreaker() {
+    const tied = gameState.tiebreakerPlayers
+      .map(id => gameState.players.find(p => p.id === id)?.name).filter(Boolean);
+    document.getElementById('tiebreaker-players-label').textContent =
+      tied.length ? tied.join(' vs ') + ' — first correct answer wins!' : '';
+  }
+
+  function syncSettingsUI() {
+    const s = gameState?.settings;
+    if (!s) return;
+    document.getElementById('buzz-time-range').value   = s.buzzTime;
+    document.getElementById('answer-time-range').value = s.answerTime;
+    document.getElementById('buzz-time-val').textContent   = s.buzzTime + 's';
+    document.getElementById('answer-time-val').textContent = s.answerTime + 's';
+    document.getElementById('lockout-toggle').checked     = !!s.lockoutEnabled;
+    document.getElementById('dd-toggle').checked          = s.dailyDoublesEnabled !== false;
+    document.getElementById('team-mode-toggle').checked   = !!s.teamMode;
+  }
+
+  let fjAnswerRevealed = false;
+
+  function renderFinalQuestion() {
+    const fq = gameState.finalQuestion;
+    if (!fq) return;
+    document.getElementById('fj-q-cat').textContent  = fq.categoryName;
+    document.getElementById('fj-q-text').textContent = fq.question || '';
+    document.getElementById('fj-q-answer').textContent = fq.answer || '';
+
+    const rows = document.getElementById('fj-judge-rows');
+    const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
+    const items = isTeam ? gameState.teams : gameState.players;
+    rows.innerHTML = items.map(item => {
+      const judged  = gameState.finalJudged.includes(item.id);
+      const wager   = gameState.finalWagers[item.id] ?? 0;
+      const answer  = gameState.finalAnswers?.[item.id] ?? '';
+      return `
+        <div class="fj-judge-row${judged ? ' judged' : ''}">
+          <div style="flex:1;min-width:0">
+            <div class="fj-judge-name">${esc(item.name)}</div>
+            ${answer
+              ? `<div style="font-size:12px;color:var(--gold);opacity:.85;margin-top:2px;word-break:break-word">${esc(answer)}</div>`
+              : `<div style="font-size:11px;opacity:.3;margin-top:2px;font-style:italic">no answer yet</div>`}
+          </div>
+          <span class="fj-judge-wager">${fmt(wager)}</span>
+          ${judged
+            ? `<span style="color:#5acc80;font-size:12px">Judged ✓</span>`
+            : `<div class="fj-judge-btns">
+                 <button class="btn btn-green btn-sm fj-correct-btn" data-pid="${item.id}">✓</button>
+                 <button class="btn btn-red btn-sm fj-wrong-btn" data-pid="${item.id}">✗</button>
+               </div>`}
+        </div>
+      `;
+    }).join('');
+
+    rows.querySelectorAll('.fj-correct-btn').forEach(btn => {
+      btn.addEventListener('click', () => socket.emit('judge-final', { playerId: btn.dataset.pid, correct: true }));
+    });
+    rows.querySelectorAll('.fj-wrong-btn').forEach(btn => {
+      btn.addEventListener('click', () => socket.emit('judge-final', { playerId: btn.dataset.pid, correct: false }));
+    });
+  }
+
+  function renderPlayers() {
+    const list = document.getElementById('players-list');
+    const adjVal = gameState.currentQuestion?.value || 200;
+    const inGame = gameState.phase !== 'lobby';
+    const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
+
+    if (isTeam) {
+      if (!gameState.teams.length) {
+        list.innerHTML = '<div style="opacity:.4;font-style:italic;font-size:13px">No teams yet…</div>';
+        return;
+      }
+      list.innerHTML = gameState.teams.map(t => {
+        const members = gameState.players.filter(p => p.teamId === t.id);
+        const memberHtml = members.map(p => `<span style="font-size:11px;opacity:.55">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}</span>`).join(' · ');
+        return `
+          <div class="player-row ${t.isCurrentTurn ? 'current' : ''}" style="flex-wrap:wrap;gap:4px">
+            <span class="player-name" style="flex:1">${esc(t.name)}${t.isCurrentTurn ? ' ★' : ''}</span>
+            <span class="player-score">${fmt(t.score)}</span>
+            ${inGame ? `
+              <div class="score-adj">
+                <button class="btn btn-gray btn-sm" onclick="adjustTeamScore('${t.id}',${-adjVal})">−</button>
+                <button class="btn btn-gray btn-sm" onclick="adjustTeamScore('${t.id}',${adjVal})">+</button>
+              </div>` : ''}
+            ${memberHtml ? `<div style="width:100%;padding-left:2px">${memberHtml}</div>` : ''}
+          </div>`;
+      }).join('');
+      // Also show teamless players in lobby
+      if (!inGame) {
+        const teamless = gameState.players.filter(p => !p.teamId);
+        if (teamless.length) {
+          list.innerHTML += `<div style="margin-top:8px;font-size:10px;opacity:.4;text-transform:uppercase;letter-spacing:1px">Awaiting team selection</div>` +
+            teamless.map(p => `<div class="player-row"><span class="player-name">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}</span><button class="btn-icon danger" onclick="removePlayer('${p.id}')">✕</button></div>`).join('');
+        }
+      }
+    } else {
+      if (!gameState.players.length) {
+        list.innerHTML = '<div style="opacity:.4;font-style:italic;font-size:13px">No players yet…</div>';
+        return;
+      }
+      list.innerHTML = gameState.players.map(p => `
+        <div class="player-row ${p.isCurrentTurn ? 'current' : ''}">
+          <span class="player-name">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}${p.isCurrentTurn ? ' ★' : ''}</span>
+          <span class="player-score">${fmt(p.score)}</span>
+          ${inGame ? `
+            <div class="score-adj">
+              <button class="btn btn-gray btn-sm" onclick="adjustScore('${p.id}',${-adjVal})">−</button>
+              <button class="btn btn-gray btn-sm" onclick="adjustScore('${p.id}',${adjVal})">+</button>
+            </div>` : `
+            <button class="btn-icon danger" onclick="removePlayer('${p.id}')">✕</button>`}
+        </div>
+      `).join('');
+    }
+  }
+
+  function adjustTeamScore(id, delta) { socket.emit('adjust-team-score', { teamId: id, delta }); }
+
+  let lastQuestionId = null;
+
+  function renderCurrentQuestion() {
+    const q = gameState.currentQuestion;
+    if (!q) return;
+    document.getElementById('current-q-section').style.display = 'block';
+    document.getElementById('cq-meta').textContent = `${q.categoryName} — $${q.value}`;
+    document.getElementById('cq-text').textContent = q.question;
+    document.getElementById('cq-answer').textContent = q.answer;
+
+    const qId = `${q.categoryName}|${q.value}`;
+    if (qId !== lastQuestionId) {
+      lastQuestionId = qId;
+      document.getElementById('cq-answer').classList.add('masked');
+      document.getElementById('reveal-btn').textContent = '👁 Reveal answer';
+    }
+
+    if (gameState.buzzedPlayerId && gameState.buzzedPlayerName) {
+      document.getElementById('judge-section').style.display = 'block';
+      document.getElementById('judge-player-name').textContent = gameState.buzzedPlayerName;
+    } else {
+      document.getElementById('judge-section').style.display = 'none';
+    }
+    hSyncTimer();
+  }
+
+  // ── Library rendering ─────────────────────────────────────────────────────
+
+  // Track which categories are expanded
+  const openCats = new Set();
+
+  // After a new category is created, auto-expand it and optionally AI-generate
+  let pendingCatId = null;
+  let pendingCatAI = false;
+
+  function renderLibrary() {
+    if (!libState || gameState?.phase !== 'lobby') return;
+
+    const { categories, activeIds } = libState;
+    const activeCount = categories.filter(c => activeIds.includes(c.id)).length;
+    document.getElementById('active-count').textContent = `${activeCount} of ${categories.length} in game`;
+
+    const container = document.getElementById('cat-list');
+    const savedY    = window.scrollY;
+
+    // Consume pending new-category action before building
+    const newCatId = pendingCatId;
+    const newCatAI = pendingCatAI;
+    pendingCatId = null;
+    pendingCatAI = false;
+    if (newCatId !== null) openCats.add(newCatId);
+
+    // Sync open state from DOM before rebuild
+    container.querySelectorAll('.lib-cat').forEach(el => {
+      if (el.querySelector('.lib-cat-body')?.classList.contains('open')) openCats.add(+el.dataset.id);
+      else openCats.delete(+el.dataset.id);
+    });
+
+    container.innerHTML = '';
+    categories.forEach((cat, idx) => buildCatCard(container, cat, activeIds.includes(cat.id), idx + 1));
+
+    // Restore category selection mode
+    if (catSelMode) {
+      container.classList.add('cat-sel-mode');
+      selectedCatIds.forEach(id => {
+        const cb = container.querySelector(`.lib-cat[data-id="${id}"] .cat-sel-check`);
+        if (cb) cb.checked = true;
+      });
+      updateCatSelToolbar();
+    }
+
+    if (newCatId !== null) {
+      const newCard = document.querySelector(`.lib-cat[data-id="${newCatId}"]`);
+      if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (newCatAI) {
+        const genBtn = newCard?.querySelector('.gen-btn');
+        if (genBtn) genBtn.click();
+      }
+    }
+
+    requestAnimationFrame(() => window.scrollTo(0, savedY));
+  }
+
+  function buildCatCard(container, cat, isActive, num) {
+    const readyQs = cat.questions.filter(q => q.question.trim() && q.answer.trim() && q.enabled !== false).length;
+    const totalQs = cat.questions.length;
+    const isOpen  = openCats.has(cat.id);
+
+    const card = document.createElement('div');
+    card.className = `lib-cat${isActive ? ' is-active' : ''}`;
+    card.dataset.id = cat.id;
+
+    const catRound = cat.round || 1;
+    card.innerHTML = `
+      <div class="lib-cat-header">
+        <input type="checkbox" class="cat-sel-check" title="Select for deletion">
+        <span class="cat-num">${num}</span>
+        <label class="tog" title="${isActive ? 'Exclude from game' : 'Include in game'}">
+          <input type="checkbox" class="cat-toggle" data-id="${cat.id}" ${isActive ? 'checked' : ''}>
+          <span class="tog-track"></span>
+        </label>
+        <input class="lib-cat-name" type="text" value="${esc(cat.name)}"
+               data-id="${cat.id}" placeholder="Category name…" spellcheck="false">
+        <span class="lib-q-badge ${readyQs > 0 ? 'has-ready' : ''}">${readyQs}/${totalQs} ready</span>
+        <div class="round-pills">
+          <button class="round-pill${catRound === 1 ? ' active-r1' : ''}" data-id="${cat.id}" data-round="1" title="Round 1">R1</button>
+          <button class="round-pill${catRound === 2 ? ' active-r2' : ''}" data-id="${cat.id}" data-round="2" title="Round 2">R2</button>
+          <button class="round-pill${catRound === 'final' ? ' active-fj' : ''}" data-id="${cat.id}" data-round="final" title="Final Jeopardy">FJ</button>
+        </div>
+        <button class="btn-icon expand-btn" data-id="${cat.id}" title="Edit questions">
+          <span class="chevron ${isOpen ? 'open' : ''}">▶</span>
+        </button>
+        <button class="btn-icon gen-btn" data-id="${cat.id}" title="Generate questions with AI">✨</button>
+        <button class="btn-icon csv-btn" data-id="${cat.id}" title="Import questions from CSV">📋</button>
+        <button class="btn-icon dup-btn" data-id="${cat.id}" title="Duplicate category">⧉</button>
+        <button class="btn-icon danger del-cat-btn" data-id="${cat.id}" title="Delete category">🗑</button>
+      </div>
+      <div class="lib-cat-body ${isOpen ? 'open' : ''}" id="body-${cat.id}">
+        <div class="q-rows" id="qrows-${cat.id}">
+          ${cat.questions.map((q, qi) => buildQRow(cat.id, qi, q)).join('')}
+        </div>
+        <div class="q-sel-controls">
+          <button class="q-sel-toggle" data-cat-id="${cat.id}">Select to delete</button>
+          <button class="q-del-sel-btn" data-cat-id="${cat.id}">🗑 Delete (0)</button>
+        </div>
+        <button class="lib-add-q add-q-btn" data-id="${cat.id}">+ Add question</button>
+      </div>
+    `;
+
+    container.appendChild(card);
+
+    // Toggle active
+    card.querySelector('.cat-toggle').addEventListener('change', e => {
+      socket.emit('set-active', { id: cat.id, active: e.target.checked });
+    });
+
+    // Rename on blur
+    const nameInput = card.querySelector('.lib-cat-name');
+    nameInput.addEventListener('blur', () => {
+      socket.emit('update-category-name', { id: cat.id, name: nameInput.value });
+    });
+    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
+    nameInput.addEventListener('click', e => e.stopPropagation());
+
+    // Expand/collapse
+    card.querySelector('.expand-btn').addEventListener('click', () => {
+      const body    = document.getElementById(`body-${cat.id}`);
+      const chevron = card.querySelector('.chevron');
+      const opening = !body.classList.contains('open');
+      body.classList.toggle('open');
+      chevron.classList.toggle('open');
+      if (opening) openCats.add(cat.id); else openCats.delete(cat.id);
+    });
+
+    // Category selection checkbox
+    card.querySelector('.cat-sel-check').addEventListener('change', e => {
+      if (e.target.checked) selectedCatIds.add(cat.id);
+      else selectedCatIds.delete(cat.id);
+      updateCatSelToolbar();
+    });
+
+    // Delete category (single)
+    card.querySelector('.del-cat-btn').addEventListener('click', () => {
+      const qCount = cat.questions.length;
+      const detail = qCount > 0 ? ` It contains ${qCount} question${qCount !== 1 ? 's' : ''}.` : '';
+      showConfirm(
+        `Delete "${cat.name}"?`,
+        `This category will be permanently removed.${detail}`,
+        () => { openCats.delete(cat.id); socket.emit('delete-category', { id: cat.id }); }
+      );
+    });
+
+    // Question selection mode toggle
+    const catBody = document.getElementById(`body-${cat.id}`);
+    card.querySelector('.q-sel-toggle').addEventListener('click', () => {
+      const inMode = catBody.classList.toggle('q-sel-mode');
+      card.querySelector('.q-sel-toggle').textContent = inMode ? 'Cancel selection' : 'Select to delete';
+      if (!inMode) {
+        catBody.querySelectorAll('.q-sel-check').forEach(cb => cb.checked = false);
+        updateQDelBtn(cat.id, catBody);
+      }
+    });
+
+    // Question bulk delete button
+    card.querySelector('.q-del-sel-btn').addEventListener('click', () => {
+      const checked = [...catBody.querySelectorAll('.q-sel-check:checked')];
+      if (checked.length === 0) return;
+      const indices = checked.map(cb => +cb.closest('.lib-q-row').dataset.qi);
+      showConfirm(
+        `Delete ${indices.length} question${indices.length !== 1 ? 's' : ''}?`,
+        `These questions will be permanently removed from "${cat.name}".`,
+        () => {
+          catBody.classList.remove('q-sel-mode');
+          card.querySelector('.q-sel-toggle').textContent = 'Select to delete';
+          socket.emit('bulk-delete-questions', { catId: cat.id, qIndices: indices });
+        }
+      );
+    });
+
+    // Add question
+    card.querySelector('.add-q-btn').addEventListener('click', () => {
+      openCats.add(cat.id);
+      socket.emit('add-question', { catId: cat.id });
+    });
+
+    // Duplicate category
+    card.querySelector('.dup-btn').addEventListener('click', () => {
+      socket.emit('duplicate-category', { id: cat.id });
+    });
+
+    // CSV import
+    card.querySelector('.csv-btn').addEventListener('click', () => {
+      openCsvModal(cat.id, cat.name);
+    });
+
+    // Round pills
+    card.querySelectorAll('.round-pill').forEach(pill => {
+      pill.addEventListener('click', e => {
+        e.stopPropagation();
+        const r = pill.dataset.round === '1' ? 1 : pill.dataset.round === '2' ? 2 : 'final';
+        socket.emit('set-category-round', { id: cat.id, round: r });
+      });
+    });
+
+    // Generate AI questions
+    card.querySelector('.gen-btn').addEventListener('click', () => {
+      // Expand body
+      const body    = document.getElementById(`body-${cat.id}`);
+      const chevron = card.querySelector('.chevron');
+      if (!body.classList.contains('open')) {
+        body.classList.add('open'); chevron.classList.add('open'); openCats.add(cat.id);
+      }
+      // Remove any existing panel then show loading
+      document.getElementById(`gen-panel-${cat.id}`)?.remove();
+      const panel = document.createElement('div');
+      panel.id = `gen-panel-${cat.id}`;
+      panel.className = 'gen-panel';
+      panel.innerHTML = '<div class="gen-loading">✨ Generating questions…</div>';
+      body.insertBefore(panel, body.querySelector('.lib-add-q'));
+      socket.emit('generate-questions', { catId: cat.id, catName: cat.name });
+    });
+
+    // Q row events
+    card.querySelectorAll('.lib-q-row').forEach(row => bindQRow(row, cat.id));
+  }
+
+  function buildQRow(catId, qi, q) {
+    const enabled = q.enabled !== false;
+    return `
+      <div class="lib-q-row${enabled ? '' : ' is-disabled'}" data-cat-id="${catId}" data-qi="${qi}">
+        <input type="checkbox" class="q-enable-check" title="${enabled ? 'Disable this question' : 'Enable this question'}" ${enabled ? 'checked' : ''}>
+        <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
+          <input class="lib-q-val" type="number" value="${q.value}" min="1" data-field="value" title="Point value">
+          ${q.dailyDouble ? '<span class="dd-badge">DD</span>' : ''}
+        </div>
+        <textarea class="lib-q-q" placeholder="Question / clue…" data-field="question" rows="1">${esc(q.question)}</textarea>
+        <textarea class="lib-q-a" placeholder="Answer…" data-field="answer" rows="1">${esc(q.answer)}</textarea>
+        <div class="q-action-cell">
+          <button class="btn-icon danger del-q-btn" title="Delete">×</button>
+          <input type="checkbox" class="q-sel-check" title="Select for deletion">
+        </div>
+      </div>
+    `;
+  }
+
+  function bindQRow(row, catId) {
+    const qi = +row.dataset.qi;
+
+    // Auto-resize textareas
+    row.querySelectorAll('textarea').forEach(ta => {
+      autoResize(ta);
+      ta.addEventListener('input', () => autoResize(ta));
+    });
+
+    // Save on blur
+    const save = () => socket.emit('update-question', {
+      catId,
+      qIdx:     qi,
+      question: row.querySelector('[data-field="question"]').value,
+      answer:   row.querySelector('[data-field="answer"]').value,
+      value:    row.querySelector('[data-field="value"]').value,
+    });
+    row.querySelectorAll('input, textarea').forEach(el => el.addEventListener('blur', save));
+
+    // Enable/disable toggle
+    row.querySelector('.q-enable-check').addEventListener('change', () => {
+      socket.emit('toggle-question', { catId, qIdx: qi });
+    });
+
+    // Delete question (single, with confirm)
+    row.querySelector('.del-q-btn').addEventListener('click', () => {
+      const qText = row.querySelector('[data-field="question"]').value.trim();
+      const label = qText.length > 50 ? qText.slice(0, 50) + '…' : (qText || 'this question');
+      showConfirm(
+        'Delete question?',
+        `"${label}" will be permanently removed.`,
+        () => socket.emit('delete-question', { catId, qIdx: qi })
+      );
+    });
+
+    // Selection checkbox — update bulk delete button
+    row.querySelector('.q-sel-check').addEventListener('change', () => {
+      const body = row.closest('.lib-cat-body');
+      if (body) updateQDelBtn(catId, body);
+    });
+  }
+
+  function autoResize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+
+  document.getElementById('reveal-btn').addEventListener('click', () => {
+    const ans = document.getElementById('cq-answer');
+    const btn = document.getElementById('reveal-btn');
+    const masked = ans.classList.toggle('masked');
+    btn.textContent = masked ? '👁 Reveal answer' : '🙈 Hide answer';
+  });
+
+  document.getElementById('start-btn').addEventListener('click', () => socket.emit('start-game'));
+
+  document.getElementById('randomize-btn').addEventListener('click', () => {
+    socket.emit('randomize-game');
+  });
+
+  socket.on('randomize-result', ({ r1, r2, hasFinal }) => {
+    const parts = [`${r1} Round 1 categor${r1 !== 1 ? 'ies' : 'y'}`];
+    if (r2 > 0) parts.push(`${r2} Round 2 categor${r2 !== 1 ? 'ies' : 'y'}`);
+    if (hasFinal) parts.push('Final Jeopardy set');
+    const summary = document.getElementById('randomize-summary');
+    summary.textContent = '✓ ' + parts.join(' · ');
+    summary.style.display = 'block';
+  });
+  document.getElementById('correct-btn').addEventListener('click', () => socket.emit('judge-answer', { correct: true }));
+  document.getElementById('wrong-btn').addEventListener('click', () => socket.emit('judge-answer', { correct: false }));
+  document.getElementById('skip-btn').addEventListener('click', () => socket.emit('skip-question'));
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    if (confirm('Reset the game? All scores will be cleared (library is kept).')) socket.emit('reset-game');
+  });
+  document.getElementById('show-answers-btn').addEventListener('click', () => {
+    const showing = document.getElementById('cat-list').classList.toggle('lib-answers-shown');
+    document.getElementById('show-answers-btn').textContent = showing ? '🙈 Answers' : '👁 Answers';
+  });
+
+  document.getElementById('cat-sel-btn').addEventListener('click', () => {
+    catSelMode = !catSelMode;
+    selectedCatIds.clear();
+    document.getElementById('cat-list').classList.toggle('cat-sel-mode', catSelMode);
+    document.getElementById('cat-sel-btn').textContent = catSelMode ? 'Done' : 'Select';
+    document.querySelectorAll('.cat-sel-check').forEach(cb => cb.checked = false);
+    updateCatSelToolbar();
+  });
+
+  document.getElementById('cat-del-sel-btn').addEventListener('click', () => {
+    const ids = [...selectedCatIds];
+    if (ids.length === 0) return;
+    const names = ids.map(id => {
+      const cat = libState?.categories.find(c => c.id === id);
+      return cat ? `"${cat.name}"` : `#${id}`;
+    });
+    const label = ids.length === 1 ? names[0] : `${ids.length} categories`;
+    showConfirm(
+      `Delete ${label}?`,
+      `${ids.length > 1 ? 'These categories' : 'This category'} will be permanently removed, including all their questions.`,
+      () => {
+        catSelMode = false;
+        selectedCatIds.clear();
+        document.getElementById('cat-list').classList.remove('cat-sel-mode');
+        document.getElementById('cat-sel-btn').textContent = 'Select';
+        updateCatSelToolbar();
+        socket.emit('bulk-delete-categories', { ids });
+      }
+    );
+  });
+
+  // Add category modal
+  function openAddCatModal() {
+    document.getElementById('add-cat-name-input').value = '';
+    document.getElementById('add-cat-name-input').classList.remove('shake');
+    document.getElementById('add-cat-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('add-cat-name-input').focus(), 50);
+  }
+  function closeAddCatModal() {
+    document.getElementById('add-cat-modal').style.display = 'none';
+  }
+  function submitAddCat(wantAI) {
+    const name = document.getElementById('add-cat-name-input').value.trim();
+    if (!name) {
+      const inp = document.getElementById('add-cat-name-input');
+      inp.classList.remove('shake');
+      void inp.offsetWidth; // reflow to restart animation
+      inp.classList.add('shake');
+      inp.focus();
+      return;
+    }
+    closeAddCatModal();
+    socket.emit('add-category', { name }, (newId) => {
+      pendingCatId = newId;
+      pendingCatAI = wantAI;
+    });
+  }
+
+  document.getElementById('gen-cats-btn').addEventListener('click', openGenCatsModal);
+  document.getElementById('add-cat-btn').addEventListener('click', openAddCatModal);
+  document.getElementById('add-cat-manual').addEventListener('click', () => submitAddCat(false));
+  document.getElementById('add-cat-ai').addEventListener('click', () => submitAddCat(true));
+  document.getElementById('add-cat-cancel').addEventListener('click', closeAddCatModal);
+  document.getElementById('add-cat-backdrop').addEventListener('click', closeAddCatModal);
+  document.getElementById('add-cat-name-input').addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAddCatModal();
+  });
+  document.getElementById('reset-lib-btn').addEventListener('click', () => {
+    socket.emit('deactivate-all-categories');
+  });
+
+  document.getElementById('delete-lib-btn').addEventListener('click', () => {
+    if (confirm('Delete all custom categories and reset to defaults? This cannot be undone.')) {
+      socket.emit('reset-library');
+    }
+  });
+
+  // Settings sliders
+  document.getElementById('buzz-time-range').addEventListener('input', function() {
+    document.getElementById('buzz-time-val').textContent = this.value + 's';
+    socket.emit('update-settings', { buzzTime: +this.value });
+  });
+  document.getElementById('answer-time-range').addEventListener('input', function() {
+    document.getElementById('answer-time-val').textContent = this.value + 's';
+    socket.emit('update-settings', { answerTime: +this.value });
+  });
+  document.getElementById('lockout-toggle').addEventListener('change', function() {
+    socket.emit('update-settings', { lockoutEnabled: this.checked });
+  });
+  document.getElementById('dd-toggle').addEventListener('change', function() {
+    socket.emit('update-settings', { dailyDoublesEnabled: this.checked });
+  });
+  document.getElementById('team-mode-toggle').addEventListener('change', function() {
+    socket.emit('update-settings', { teamMode: this.checked });
+  });
+
+  // DD reveal
+  document.getElementById('dd-reveal-btn').addEventListener('click', () => {
+    const ans = document.getElementById('dd-q-answer');
+    const btn = document.getElementById('dd-reveal-btn');
+    const masked = ans.classList.toggle('masked');
+    btn.textContent = masked ? '👁 Reveal answer' : '🙈 Hide answer';
+  });
+
+  // Export library
+  document.getElementById('export-lib-btn').addEventListener('click', () => {
+    if (!libState) return;
+    const blob = new Blob([JSON.stringify(libState, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'trivia-library.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // Import library
+  document.getElementById('import-lib-input').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!Array.isArray(data.categories)) { toast('Invalid library file.'); return; }
+        if (!confirm(`Import ${data.categories.length} categories? This will replace the current library.`)) return;
+        socket.emit('import-library', { categories: data.categories, activeIds: data.activeIds });
+      } catch { toast('Could not parse file.'); }
+    };
+    reader.readAsText(file);
+    this.value = '';
+  });
+
+  // CSV modal
+  let csvCatId = null;
+  function openCsvModal(catId, catName) {
+    csvCatId = catId;
+    document.getElementById('csv-input').value = '';
+    document.getElementById('csv-preview').textContent = '';
+    document.getElementById('csv-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('csv-input').focus(), 50);
+  }
+  document.getElementById('csv-backdrop').addEventListener('click', () => { document.getElementById('csv-modal').style.display = 'none'; });
+  document.getElementById('csv-cancel-btn').addEventListener('click', () => { document.getElementById('csv-modal').style.display = 'none'; });
+  document.getElementById('csv-input').addEventListener('input', function() {
+    const parsed = parseCsv(this.value);
+    document.getElementById('csv-preview').textContent = parsed.length ? `${parsed.length} question${parsed.length !== 1 ? 's' : ''} detected` : '';
+  });
+  document.getElementById('csv-add-btn').addEventListener('click', () => {
+    const questions = parseCsv(document.getElementById('csv-input').value);
+    if (!questions.length) { toast('No valid questions found.'); return; }
+    socket.emit('import-csv-questions', { catId: csvCatId, questions });
+    document.getElementById('csv-modal').style.display = 'none';
+    toast(`Added ${questions.length} question${questions.length !== 1 ? 's' : ''}.`);
+  });
+  function parseCsv(text) {
+    const results = [];
+    let autoVal = 200;
+    text.split('\n').forEach(line => {
+      line = line.trim();
+      if (!line) return;
+      // Try to detect if first token is numeric (value)
+      const firstComma = line.indexOf(',');
+      if (firstComma === -1) return;
+      const firstToken = line.slice(0, firstComma).trim();
+      const rest = line.slice(firstComma + 1);
+      const lastComma = rest.lastIndexOf(',');
+      if (lastComma === -1) return;
+      let value, question, answer;
+      if (/^\d+$/.test(firstToken)) {
+        value    = parseInt(firstToken);
+        question = rest.slice(0, lastComma).trim();
+        answer   = rest.slice(lastComma + 1).trim();
+      } else {
+        value    = autoVal;
+        question = (firstToken + ',' + rest.slice(0, lastComma)).trim();
+        answer   = rest.slice(lastComma + 1).trim();
+        autoVal += 200;
+      }
+      if (question && answer) results.push({ value, question, answer });
+    });
+    return results;
+  }
+
+  document.getElementById('start-round2-btn').addEventListener('click', () => socket.emit('start-round2'));
+  document.getElementById('force-reveal-btn').addEventListener('click', () => socket.emit('reveal-final-question'));
+  document.getElementById('fj-reveal-btn').addEventListener('click', () => {
+    const ans = document.getElementById('fj-q-answer');
+    const btn = document.getElementById('fj-reveal-btn');
+    const masked = ans.classList.toggle('masked');
+    btn.textContent = masked ? '👁 Reveal answer' : '🙈 Hide answer';
+  });
+
+  function removePlayer(id) { socket.emit('remove-player', id); }
+  function adjustScore(id, delta) { socket.emit('adjust-score', { playerId: id, delta }); }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function fmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString(); }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────
+
+  function formatHistoryDate(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return iso; }
+  }
+
+  function renderHistoryList(histData) {
+    const list = document.getElementById('history-list');
+    if (!histData || histData.length === 0) {
+      list.innerHTML = '<div class="hist-empty">No games recorded yet.</div>';
+      return;
+    }
+    list.innerHTML = histData.map((entry, i) => {
+      const isTeam = entry.isTeamGame;
+      const items = isTeam ? (entry.teams || []) : (entry.players || []);
+      const countLabel = isTeam
+        ? `${items.length} team${items.length !== 1 ? 's' : ''}`
+        : `${items.length} player${items.length !== 1 ? 's' : ''}`;
+      const rounds = entry.rounds > 1 ? `${entry.rounds} rounds` : '1 round';
+      const scoresHtml = items
+        .slice().sort((a, b) => b.score - a.score)
+        .map(item => `
+          <div class="hist-detail-row">
+            <span class="hist-detail-name">${item.emoji ? item.emoji + ' ' : ''}${esc(item.name)}</span>
+            <span class="hist-detail-score">${fmt(item.score)}</span>
+          </div>
+        `).join('');
+      const catsHtml = entry.categoriesPlayed?.length
+        ? `<div class="hist-cats">Categories: ${entry.categoriesPlayed.map(esc).join(', ')}</div>`
+        : '';
+      return `
+        <div class="hist-row" data-idx="${i}">
+          <div class="hist-row-header">
+            <span class="hist-date">${esc(formatHistoryDate(entry.date))}</span>
+            <span class="hist-winner">🏆 ${esc(entry.winner || '—')}</span>
+            <span class="hist-meta">${esc(countLabel)} · ${esc(rounds)}</span>
+            <span class="hist-chevron">▶</span>
+          </div>
+          <div class="hist-details" id="hist-details-${i}">
+            <div class="hist-detail-scores">${scoresHtml}</div>
+            ${catsHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.hist-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = row.dataset.idx;
+        const details = document.getElementById(`hist-details-${idx}`);
+        const chevron = row.querySelector('.hist-chevron');
+        const open = details.classList.toggle('open');
+        chevron.classList.toggle('open', open);
+      });
+    });
+  }
+
+  socket.on('history-data', renderHistoryList);
+
+  function openHistoryModal() {
+    document.getElementById('history-modal').style.display = 'flex';
+    socket.emit('get-history');
+  }
+
+  function closeHistoryModal() {
+    document.getElementById('history-modal').style.display = 'none';
+  }
+
+  document.getElementById('history-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    openHistoryModal();
+  });
+  document.getElementById('history-backdrop').addEventListener('click', closeHistoryModal);
+  document.getElementById('history-close-btn').addEventListener('click', closeHistoryModal);
+  document.getElementById('clear-history-btn').addEventListener('click', () => {
+    if (confirm('Clear all game history? This cannot be undone.')) {
+      socket.emit('clear-history');
+    }
+  });
+</script>
+</body>
+</html>

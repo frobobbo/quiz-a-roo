@@ -1,0 +1,16 @@
+{
+  "name": "trivia",
+  "version": "1.0.0",
+  "description": "Jeopardy-style multiplayer trivia game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "npx nodemon server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.3",
+    "express": "^4.18.2",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.2"
+  }
+}
