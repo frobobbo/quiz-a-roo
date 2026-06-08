@@ -52,7 +52,8 @@
       --gold: #d4a830; --white: #efe8ff; --green: #286840; --red: #9e3535; --border: #2c0e58;
     }
 
-    html, body { min-height: 100%; background: var(--bg); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+    body { display: flex; flex-direction: column; }
 
     header {
       background: var(--darker);
@@ -69,10 +70,13 @@
     .phase-badge { background: var(--dark); border: 1px solid var(--gold); border-radius: 20px; padding: 3px 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
 
     /* ── LAYOUT ── */
-    .layout { display: flex; min-height: calc(100vh - 46px); }
-    .left  { width: 280px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+    .left  { width: 280px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
     .right { flex: 1; background: var(--panel2); overflow-y: auto; }
     .panel-body { padding: 14px; }
+
+    /* ── LOBBY BAR ── */
+    #lobby-bar { flex-shrink: 0; background: var(--darker); border-bottom: 1px solid var(--border); padding: 10px 16px; display: none; align-items: center; gap: 10px; flex-wrap: wrap; }
 
     .section { margin-bottom: 18px; }
     .section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--gold); opacity: 0.6; margin-bottom: 8px; }
@@ -117,7 +121,7 @@
     .q-reveal-btn:hover { color: var(--white); border-color: #667; }
 
     /* ── LIBRARY MANAGER ── */
-    .lib-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .lib-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; position: sticky; top: 0; z-index: 10; background: var(--panel2); padding: 14px 14px 10px; margin: -14px -14px 10px; }
     .lib-toolbar .section-title { margin-bottom: 0; }
     .active-count { background: var(--dark); border: 1px solid #446; border-radius: 12px; padding: 3px 10px; font-size: 11px; color: var(--gold); flex-shrink: 0; }
     .lib-toolbar-spacer { flex: 1; }
@@ -374,6 +378,12 @@
   <a href="/settings" id="settings-link" title="Settings">⚙</a>
 </header>
 
+<div id="lobby-bar">
+  <button class="btn btn-gold" id="start-btn" style="font-size:15px;padding:10px 28px">START GAME</button>
+  <button class="btn btn-gray" id="randomize-btn">🎲 Random Game Setup</button>
+  <div id="randomize-summary" style="display:none;font-size:11px;color:rgba(255,255,255,.45);line-height:1.6"></div>
+</div>
+
 <div class="layout">
 
   <!-- ── LEFT PANEL ── -->
@@ -400,18 +410,11 @@
 
     </div>
 
-    <!-- Fixed bottom controls -->
-    <div style="padding:14px;border-top:1px solid var(--border);background:var(--panel)">
-      <div id="lobby-actions">
-        <button class="btn btn-gold btn-full" id="start-btn" style="font-size:15px;padding:13px">START GAME</button>
-        <button class="btn btn-gray btn-full" id="randomize-btn" style="margin-top:8px;font-size:13px">🎲 Random Game Setup</button>
-        <div id="randomize-summary" style="display:none;margin-top:8px;font-size:11px;text-align:center;color:rgba(255,255,255,.45);line-height:1.6"></div>
-      </div>
-      <div id="game-actions" style="display:none">
-        <div class="action-row">
-          <button class="btn btn-gray" id="skip-btn" style="display:none">Skip Question</button>
-          <button class="btn btn-gray" id="reset-btn">Reset Game</button>
-        </div>
+    <!-- Game controls (in-game only) -->
+    <div id="game-actions" style="display:none;padding:14px;border-top:1px solid var(--border);background:var(--panel)">
+      <div class="action-row">
+        <button class="btn btn-gray" id="skip-btn" style="display:none">Skip Question</button>
+        <button class="btn btn-gray" id="reset-btn">Reset Game</button>
       </div>
     </div>
   </div>
@@ -925,7 +928,7 @@
     const inGame = phase !== 'lobby';
 
     document.getElementById('phase-badge').textContent = phase.replace(/-/g, ' ').toUpperCase();
-    document.getElementById('lobby-actions').style.display   = inGame ? 'none' : 'block';
+    document.getElementById('lobby-bar').style.display       = inGame ? 'none' : 'flex';
     if (inGame) document.getElementById('randomize-summary').style.display = 'none';
     document.getElementById('game-actions').style.display    = inGame ? 'block' : 'none';
     document.getElementById('url-section').style.display     = inGame ? 'none' : 'block';
