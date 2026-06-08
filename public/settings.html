@@ -87,6 +87,9 @@
     .voice-label { font-size: 13px; flex: 1; }
     .voice-label span { font-size: 11px; color: rgba(255,255,255,.35); display: block; margin-top: 1px; }
     .custom-voice-row { display: flex; flex-direction: column; gap: 6px; }
+    .voice-del { background: none; border: none; color: rgba(255,255,255,.25); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 0 0 6px; flex-shrink: 0; }
+    .voice-del:hover { color: #cc4444; }
+    .add-voice-form { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: rgba(255,255,255,.04); border: 1px dashed rgba(255,255,255,.15); border-radius: 8px; }
     .btn-test { background: transparent; border: 1px solid var(--border); border-radius: 8px; color: rgba(255,255,255,.6); font-size: 12px; padding: 8px 16px; cursor: pointer; transition: all .15s; white-space: nowrap; }
     .btn-test:hover { border-color: var(--gold); color: var(--gold); }
     .btn-test:disabled { opacity: .4; cursor: default; }
@@ -190,14 +193,15 @@
         <div class="setting-label" style="margin:14px 0 8px">Voice</div>
         <div class="voice-grid" id="voice-grid"></div>
 
-        <div class="custom-voice-row" style="margin-top:10px">
-          <div class="setting-label">Custom Voice ID <span style="color:rgba(255,255,255,.25);font-size:10px">— paste any ID from the ElevenLabs voice library</span></div>
+        <div class="add-voice-form" style="margin-top:10px">
+          <div class="setting-label">Add Voice from ElevenLabs Library</div>
           <div class="input-row">
-            <input type="text" id="custom-voice-id" placeholder="e.g. pNInz6obpgDQGcFmaJgB" spellcheck="false" style="font-family:monospace;font-size:12px">
+            <input type="text" id="new-voice-id" placeholder="Voice ID (e.g. pNInz6obpgDQGcFmaJgB)" spellcheck="false" style="font-family:monospace;font-size:12px;flex:2">
+            <input type="text" id="new-voice-name" placeholder="Name (e.g. Morgan Freeman)" style="flex:1">
+            <button class="btn-save" id="add-voice-btn">+ Add</button>
           </div>
-          <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:4px">
-            Find Morgan Freeman, Alex Trebek, and thousands more at
-            <a href="https://elevenlabs.io/voice-library" target="_blank" style="color:var(--gold)">elevenlabs.io/voice-library</a>
+          <div style="font-size:11px;color:rgba(255,255,255,.3)">
+            Find voices at <a href="https://elevenlabs.io/voice-library" target="_blank" style="color:var(--gold)">elevenlabs.io/voice-library</a> — click a voice, copy its ID from the URL or share link
           </div>
         </div>
 
@@ -371,73 +375,101 @@
   ];
 
   let selectedVoiceId = VOICES[0].id;
+  let customVoices = []; // { id, name } — user-added voices
 
   function buildVoiceGrid(currentId) {
     selectedVoiceId = currentId || VOICES[0].id;
+    const allVoices = [
+      ...VOICES.map(v => ({ ...v, custom: false })),
+      ...customVoices.map(v => ({ ...v, desc: 'Custom voice', custom: true })),
+    ];
+    // If selectedVoiceId not found, fall back to first
+    if (!allVoices.find(v => v.id === selectedVoiceId)) selectedVoiceId = VOICES[0].id;
     const grid = document.getElementById('voice-grid');
-    grid.innerHTML = VOICES.map(v => `
+    grid.innerHTML = allVoices.map(v => `
       <label class="voice-option${v.id === selectedVoiceId ? ' selected' : ''}">
         <input type="radio" class="voice-radio" name="voice" value="${v.id}" ${v.id === selectedVoiceId ? 'checked' : ''}>
         <div class="voice-label">${v.name}<span>${v.desc}</span></div>
+        ${v.custom ? `<button type="button" class="voice-del" data-id="${v.id}" title="Remove from library">×</button>` : ''}
       </label>
     `).join('');
     grid.querySelectorAll('input[type=radio]').forEach(r => {
       r.addEventListener('change', () => {
         selectedVoiceId = r.value;
         grid.querySelectorAll('.voice-option').forEach(o => o.classList.toggle('selected', o.querySelector('input').value === selectedVoiceId));
-        document.getElementById('custom-voice-id').value = '';
       });
     });
+    grid.querySelectorAll('.voice-del').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        customVoices = customVoices.filter(v => v.id !== btn.dataset.id);
+        if (selectedVoiceId === btn.dataset.id) selectedVoiceId = VOICES[0].id;
+        buildVoiceGrid(selectedVoiceId);
+        saveTTSSettings();
+      });
+    });
+  }
+
+  async function saveTTSSettings(feedback) {
+    const enabled = document.getElementById('tts-enabled-toggle').checked;
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tts: { enabled, voiceId: selectedVoiceId, customVoices } }),
+    });
+    if (feedback) showFeedback('tts-feedback', res.ok ? feedback : 'Save failed.', res.ok ? 'ok' : 'err');
+    return res;
   }
 
   document.getElementById('tts-enabled-toggle').addEventListener('change', function() {
     document.getElementById('tts-options').style.display = this.checked ? 'block' : 'none';
   });
 
-  document.getElementById('custom-voice-id').addEventListener('input', function() {
-    if (this.value.trim()) {
-      selectedVoiceId = this.value.trim();
-      document.querySelectorAll('input[name=voice]').forEach(r => r.checked = false);
-      document.querySelectorAll('.voice-option').forEach(o => o.classList.remove('selected'));
+  document.getElementById('add-voice-btn').addEventListener('click', () => {
+    const id   = document.getElementById('new-voice-id').value.trim();
+    const name = document.getElementById('new-voice-name').value.trim() || `Custom Voice ${customVoices.length + 1}`;
+    if (!id) { showFeedback('tts-feedback', 'Paste a voice ID first.', 'err'); return; }
+    if ([...VOICES, ...customVoices].some(v => v.id === id)) {
+      showFeedback('tts-feedback', 'That voice ID is already in the library.', 'err'); return;
     }
+    customVoices.push({ id, name });
+    document.getElementById('new-voice-id').value   = '';
+    document.getElementById('new-voice-name').value = '';
+    selectedVoiceId = id;
+    buildVoiceGrid(id);
+    saveTTSSettings(`"${name}" added and selected.`);
   });
 
-  document.getElementById('tts-save').addEventListener('click', async () => {
-    const customId = document.getElementById('custom-voice-id').value.trim();
-    const voiceId  = customId || selectedVoiceId;
-    const enabled  = document.getElementById('tts-enabled-toggle').checked;
-    const res = await fetch('/api/app-settings', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tts: { enabled, voiceId } }),
-    });
-    showFeedback('tts-feedback', res.ok ? 'Saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
-  });
+  document.getElementById('tts-save').addEventListener('click', () => saveTTSSettings('Saved.'));
 
   document.getElementById('tts-test').addEventListener('click', async () => {
-    const customId = document.getElementById('custom-voice-id').value.trim();
-    const voiceId  = customId || selectedVoiceId;
+    const voiceId = selectedVoiceId;
     const btn = document.getElementById('tts-test');
     btn.disabled = true;
     btn.textContent = '⏳ Generating…';
-    // Save voice first so the server uses it
+    // Save current voice selection so the server uses it
     await fetch('/api/app-settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tts: { enabled: true, voiceId } }),
+      body: JSON.stringify({ tts: { enabled: true, voiceId, customVoices } }),
     });
     try {
       const res = await fetch('/api/tts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: "Welcome to Quiz-a-Roo! Science and Nature for two hundred dollars. This planet has the most moons in our solar system." }),
       });
-      if (res.ok && res.status !== 204) {
+      if (res.status === 204) {
+        showFeedback('tts-feedback', 'TTS is disabled — toggle it on first.', 'err');
+      } else if (res.ok) {
         const blob = await res.blob();
         const url  = URL.createObjectURL(blob);
         const audio = new Audio(url);
-        audio.play();
+        audio.play().catch(e => showFeedback('tts-feedback', 'Playback blocked: ' + e.message, 'err'));
         audio.onended = () => URL.revokeObjectURL(url);
         showFeedback('tts-feedback', 'Playing…', 'ok');
       } else {
-        showFeedback('tts-feedback', 'Could not generate audio. Check your ElevenLabs key.', 'err');
+        let detail = `HTTP ${res.status}`;
+        try { const j = await res.json(); detail = j.error || detail; } catch {}
+        showFeedback('tts-feedback', 'Error: ' + detail, 'err');
+        console.error('TTS error', res.status, detail);
       }
     } catch (e) {
       showFeedback('tts-feedback', 'Error: ' + e.message, 'err');
@@ -545,11 +577,11 @@
 
     // Voice narration
     const tts = s.tts || {};
+    customVoices = Array.isArray(tts.customVoices) ? tts.customVoices : [];
     document.getElementById('tts-enabled-toggle').checked = !!tts.enabled;
     document.getElementById('tts-options').style.display = tts.enabled ? 'block' : 'none';
-    const knownId = VOICES.find(v => v.id === tts.voiceId);
-    buildVoiceGrid(knownId ? tts.voiceId : VOICES[0].id);
-    if (tts.voiceId && !knownId) document.getElementById('custom-voice-id').value = tts.voiceId;
+    const allVoiceIds = [...VOICES, ...customVoices].map(v => v.id);
+    buildVoiceGrid(allVoiceIds.includes(tts.voiceId) ? tts.voiceId : VOICES[0].id);
 
     // Appearance
     buildThemeGrid(s.defaultTheme || 'classic');
