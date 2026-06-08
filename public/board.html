@@ -436,6 +436,7 @@
   </div>
   <div id="lobby-players"></div>
   <div class="waiting-msg" id="lobby-msg">Waiting for players to join…</div>
+  <button id="audio-unlock-btn" onclick="unlockAudio(this)" style="margin-top:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);border-radius:8px;color:rgba(255,255,255,.5);font-size:13px;letter-spacing:1px;padding:8px 20px;cursor:pointer">🔊 Enable Audio</button>
 </div>
 
 <!-- GAME BOARD -->
@@ -845,6 +846,19 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
     return audioCtx;
+  }
+
+  function unlockAudio(btn) {
+    const ctx = getAudioCtx();
+    ctx.resume().then(() => {
+      // Play a silent buffer to fully unlock
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start();
+      if (btn) { btn.textContent = '🔊 Audio Enabled'; btn.style.opacity = '.35'; btn.disabled = true; }
+    });
   }
 
   function isMuted() { return localStorage.getItem('trivia_mute') === '1'; }
