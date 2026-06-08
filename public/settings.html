@@ -78,6 +78,19 @@
     .tog input:checked + .tog-track::before { transform: translateX(18px); }
     .settings-save-row { display: flex; align-items: center; gap: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
 
+    /* Voice select */
+    .voice-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .voice-option { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--dark); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border-color .15s; }
+    .voice-option:hover { border-color: rgba(255,255,255,.3); }
+    .voice-option.selected { border-color: var(--gold); background: rgba(192,154,56,.08); }
+    .voice-radio { width: 14px; height: 14px; accent-color: var(--gold); flex-shrink: 0; }
+    .voice-label { font-size: 13px; flex: 1; }
+    .voice-label span { font-size: 11px; color: rgba(255,255,255,.35); display: block; margin-top: 1px; }
+    .custom-voice-row { display: flex; flex-direction: column; gap: 6px; }
+    .btn-test { background: transparent; border: 1px solid var(--border); border-radius: 8px; color: rgba(255,255,255,.6); font-size: 12px; padding: 8px 16px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .btn-test:hover { border-color: var(--gold); color: var(--gold); }
+    .btn-test:disabled { opacity: .4; cursor: default; }
+
     /* Appearance */
     .tp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
     .tp-swatch { border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color .15s, transform .1s; }
@@ -132,6 +145,67 @@
         Required for AI question generation. Get a key at
         <a href="https://console.anthropic.com" target="_blank" style="color:var(--gold)">console.anthropic.com</a>.
         Stored in <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px">config.json</code> on the server.
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+
+      <div class="api-status">
+        <div class="api-dot missing" id="el-dot"></div>
+        <span id="el-status-text">Checking…</span>
+        <span class="api-preview" id="el-preview"></span>
+      </div>
+      <div>
+        <div class="setting-label" style="margin-bottom:8px">ElevenLabs API Key <span style="color:rgba(255,255,255,.25);font-size:10px">(for voice narration)</span></div>
+        <div class="input-row">
+          <input type="password" id="el-key-input" placeholder="sk_…" autocomplete="off" spellcheck="false">
+          <button class="btn-save" id="el-key-save">Save</button>
+        </div>
+        <div class="save-feedback" id="el-key-feedback" style="margin-top:8px"></div>
+      </div>
+      <div style="font-size:12px;color:rgba(255,255,255,.35);line-height:1.6">
+        Required for AI voice narration. Get a key at
+        <a href="https://elevenlabs.io" target="_blank" style="color:var(--gold)">elevenlabs.io</a>.
+        Free tier included.
+      </div>
+    </div>
+  </div>
+
+  <!-- Voice Narration -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Voice Narration</h2>
+    </div>
+    <div class="card-body">
+      <div class="tog-list">
+        <div class="tog-row">
+          <label class="tog">
+            <input type="checkbox" id="tts-enabled-toggle">
+            <span class="tog-track"></span>
+          </label>
+          <span class="setting-label">Read questions aloud during game</span>
+        </div>
+      </div>
+
+      <div id="tts-options" style="display:none">
+        <div class="setting-label" style="margin:14px 0 8px">Voice</div>
+        <div class="voice-grid" id="voice-grid"></div>
+
+        <div class="custom-voice-row" style="margin-top:10px">
+          <div class="setting-label">Custom Voice ID <span style="color:rgba(255,255,255,.25);font-size:10px">— paste any ID from the ElevenLabs voice library</span></div>
+          <div class="input-row">
+            <input type="text" id="custom-voice-id" placeholder="e.g. pNInz6obpgDQGcFmaJgB" spellcheck="false" style="font-family:monospace;font-size:12px">
+          </div>
+          <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:4px">
+            Find Morgan Freeman, Alex Trebek, and thousands more at
+            <a href="https://elevenlabs.io/voice-library" target="_blank" style="color:var(--gold)">elevenlabs.io/voice-library</a>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          <button class="btn-save" id="tts-save">Save Voice Settings</button>
+          <button class="btn-test" id="tts-test">▶ Test Voice</button>
+          <div class="save-feedback" id="tts-feedback"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -282,6 +356,116 @@
     showFeedback('theme-feedback', res.ok ? 'Custom theme saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
   });
 
+  // ── Voice presets ─────────────────────────────────────────────────────────
+  const VOICES = [
+    { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam',    desc: 'Deep & authoritative' },
+    { id: 'SOYHLrjzK2X1ezoPC6cr', name: 'Harry',   desc: 'Warm & storytelling' },
+    { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel',  desc: 'British narrator' },
+    { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam',    desc: 'Classic game show host' },
+    { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold',  desc: 'Strong & bold' },
+    { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh',    desc: 'Deep & clear' },
+    { id: 'ZQe5CZNOzWyzPSCn5a3c', name: 'James',   desc: 'Smooth & calm' },
+    { id: 'flq6f7ztfj1uc8fnMIAO', name: 'Michael', desc: 'Conversational' },
+    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel',  desc: 'Clear & polished' },
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah',   desc: 'Warm & professional' },
+  ];
+
+  let selectedVoiceId = VOICES[0].id;
+
+  function buildVoiceGrid(currentId) {
+    selectedVoiceId = currentId || VOICES[0].id;
+    const grid = document.getElementById('voice-grid');
+    grid.innerHTML = VOICES.map(v => `
+      <label class="voice-option${v.id === selectedVoiceId ? ' selected' : ''}">
+        <input type="radio" class="voice-radio" name="voice" value="${v.id}" ${v.id === selectedVoiceId ? 'checked' : ''}>
+        <div class="voice-label">${v.name}<span>${v.desc}</span></div>
+      </label>
+    `).join('');
+    grid.querySelectorAll('input[type=radio]').forEach(r => {
+      r.addEventListener('change', () => {
+        selectedVoiceId = r.value;
+        grid.querySelectorAll('.voice-option').forEach(o => o.classList.toggle('selected', o.querySelector('input').value === selectedVoiceId));
+        document.getElementById('custom-voice-id').value = '';
+      });
+    });
+  }
+
+  document.getElementById('tts-enabled-toggle').addEventListener('change', function() {
+    document.getElementById('tts-options').style.display = this.checked ? 'block' : 'none';
+  });
+
+  document.getElementById('custom-voice-id').addEventListener('input', function() {
+    if (this.value.trim()) {
+      selectedVoiceId = this.value.trim();
+      document.querySelectorAll('input[name=voice]').forEach(r => r.checked = false);
+      document.querySelectorAll('.voice-option').forEach(o => o.classList.remove('selected'));
+    }
+  });
+
+  document.getElementById('tts-save').addEventListener('click', async () => {
+    const customId = document.getElementById('custom-voice-id').value.trim();
+    const voiceId  = customId || selectedVoiceId;
+    const enabled  = document.getElementById('tts-enabled-toggle').checked;
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tts: { enabled, voiceId } }),
+    });
+    showFeedback('tts-feedback', res.ok ? 'Saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
+  });
+
+  document.getElementById('tts-test').addEventListener('click', async () => {
+    const customId = document.getElementById('custom-voice-id').value.trim();
+    const voiceId  = customId || selectedVoiceId;
+    const btn = document.getElementById('tts-test');
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating…';
+    // Save voice first so the server uses it
+    await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tts: { enabled: true, voiceId } }),
+    });
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: "Welcome to Quiz-a-Roo! Science and Nature for two hundred dollars. This planet has the most moons in our solar system." }),
+      });
+      if (res.ok && res.status !== 204) {
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.play();
+        audio.onended = () => URL.revokeObjectURL(url);
+        showFeedback('tts-feedback', 'Playing…', 'ok');
+      } else {
+        showFeedback('tts-feedback', 'Could not generate audio. Check your ElevenLabs key.', 'err');
+      }
+    } catch (e) {
+      showFeedback('tts-feedback', 'Error: ' + e.message, 'err');
+    }
+    btn.disabled = false;
+    btn.textContent = '▶ Test Voice';
+  });
+
+  // ElevenLabs key save
+  document.getElementById('el-key-save').addEventListener('click', async () => {
+    const key = document.getElementById('el-key-input').value.trim();
+    const btn = document.getElementById('el-key-save');
+    btn.disabled = true;
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ elKey: key }),
+    });
+    btn.disabled = false;
+    if (res.ok) {
+      document.getElementById('el-key-input').value = '';
+      showFeedback('el-key-feedback', 'ElevenLabs key saved.', 'ok');
+      document.getElementById('el-dot').className = 'api-dot ok';
+      document.getElementById('el-status-text').textContent = 'Configured';
+    } else {
+      showFeedback('el-key-feedback', 'Failed to save.', 'err');
+    }
+  });
+
   // API key save
   document.getElementById('api-key-save').addEventListener('click', async () => {
     const key = document.getElementById('api-key-input').value.trim();
@@ -341,10 +525,15 @@
     if (!res.ok) return;
     const s = await res.json();
 
-    // API key status
+    // Anthropic API key status
     document.getElementById('api-dot').className = 'api-dot ' + (s.apiKeyConfigured ? 'ok' : 'missing');
     document.getElementById('api-status-text').textContent = s.apiKeyConfigured ? 'Configured' : 'Not configured';
     if (s.apiKeyPreview) document.getElementById('api-preview').textContent = s.apiKeyPreview;
+
+    // ElevenLabs key status
+    document.getElementById('el-dot').className = 'api-dot ' + (s.elKeyConfigured ? 'ok' : 'missing');
+    document.getElementById('el-status-text').textContent = s.elKeyConfigured ? 'Configured' : 'Not configured';
+    if (s.elKeyPreview) document.getElementById('el-preview').textContent = s.elKeyPreview;
 
     // Game defaults
     const d = s.gameDefaults || {};
@@ -353,6 +542,14 @@
     document.getElementById('lockout-toggle').checked  = !!d.lockoutEnabled;
     document.getElementById('dd-toggle').checked       = d.dailyDoublesEnabled !== false;
     document.getElementById('team-mode-toggle').checked = !!d.teamMode;
+
+    // Voice narration
+    const tts = s.tts || {};
+    document.getElementById('tts-enabled-toggle').checked = !!tts.enabled;
+    document.getElementById('tts-options').style.display = tts.enabled ? 'block' : 'none';
+    const knownId = VOICES.find(v => v.id === tts.voiceId);
+    buildVoiceGrid(knownId ? tts.voiceId : VOICES[0].id);
+    if (tts.voiceId && !knownId) document.getElementById('custom-voice-id').value = tts.voiceId;
 
     // Appearance
     buildThemeGrid(s.defaultTheme || 'classic');

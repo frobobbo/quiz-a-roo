@@ -20,6 +20,7 @@ const config = loadConfig();
 const https = require('https');
 let apiKey = config.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
 let anthropic = apiKey ? new Anthropic({ apiKey, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
+let elevenLabsKey = config.ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY || '';
 
 const PORT = process.env.PORT || 3000;
 const LIBRARY_FILE = path.join(__dirname, 'library.json');
@@ -117,31 +118,44 @@ app.get('/settings', requireHost, (req, res) => res.sendFile(path.join(__dirname
 
 app.get('/api/app-settings', requireHost, (req, res) => {
   const cfg = loadConfig();
-  const key = cfg.ANTHROPIC_API_KEY || '';
+  const key  = cfg.ANTHROPIC_API_KEY  || '';
+  const elKey = cfg.ELEVENLABS_API_KEY || '';
   res.json({
-    apiKeyConfigured: !!key,
-    apiKeyPreview: key ? key.slice(0, 14) + '…' + key.slice(-4) : '',
-    gameDefaults: appSettings.gameDefaults || {},
-    defaultTheme: appSettings.defaultTheme || 'classic',
-    customThemeVars: appSettings.customThemeVars || null,
+    apiKeyConfigured:  !!key,
+    apiKeyPreview:     key  ? key.slice(0, 14)  + '…' + key.slice(-4)  : '',
+    elKeyConfigured:   !!elKey,
+    elKeyPreview:      elKey ? elKey.slice(0, 8) + '…' + elKey.slice(-4) : '',
+    gameDefaults:      appSettings.gameDefaults  || {},
+    defaultTheme:      appSettings.defaultTheme  || 'classic',
+    customThemeVars:   appSettings.customThemeVars || null,
+    tts:               appSettings.tts || {},
   });
 });
 
 app.post('/api/app-settings', requireHost, (req, res) => {
-  const { apiKey: newKey, gameDefaults, defaultTheme, customThemeVars } = req.body;
-  if (newKey !== undefined) {
-    const trimmed = (newKey || '').trim();
+  const { apiKey: newKey, elKey: newElKey, gameDefaults, defaultTheme, customThemeVars, tts } = req.body;
+  if (newKey !== undefined || newElKey !== undefined) {
     const cfg = loadConfig();
-    cfg.ANTHROPIC_API_KEY = trimmed;
+    if (newKey !== undefined) {
+      const trimmed = (newKey || '').trim();
+      cfg.ANTHROPIC_API_KEY = trimmed;
+      apiKey = trimmed;
+      anthropic = trimmed ? new Anthropic({ apiKey: trimmed, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
+    }
+    if (newElKey !== undefined) {
+      const trimmed = (newElKey || '').trim();
+      cfg.ELEVENLABS_API_KEY = trimmed;
+      elevenLabsKey = trimmed;
+    }
     try { fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(cfg, null, 2)); }
     catch (e) { return res.status(500).json({ error: 'Failed to save API key.' }); }
-    apiKey = trimmed;
-    anthropic = trimmed ? new Anthropic({ apiKey: trimmed, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
   }
   if (gameDefaults && typeof gameDefaults === 'object') appSettings.gameDefaults = { ...appSettings.gameDefaults, ...gameDefaults };
-  if (defaultTheme !== undefined) appSettings.defaultTheme = defaultTheme;
+  if (defaultTheme   !== undefined) appSettings.defaultTheme   = defaultTheme;
   if (customThemeVars !== undefined) appSettings.customThemeVars = customThemeVars;
+  if (tts && typeof tts === 'object') appSettings.tts = { ...(appSettings.tts || {}), ...tts };
   saveAppSettings();
+  broadcast(); // push updated ttsEnabled to board
   res.json({ ok: true });
 });
 
@@ -309,6 +323,7 @@ function publicState() {
     })),
     currentPage: game.currentPage || 1,
     pages: game.pages || [{ id: 1, name: 'Page 1' }],
+    ttsEnabled: !!(appSettings.tts?.enabled && elevenLabsKey),
     currentQuestion: game.currentQuestion ? {
       categoryName: game.currentQuestion.categoryName,
       value: game.currentQuestion.value,
@@ -479,6 +494,46 @@ function advanceTurn(winnerId) {
   }
   broadcast();
 }
+
+// ── TTS proxy ─────────────────────────────────────────────────────────────────
+
+app.post('/api/tts', (req, res) => {
+  const text = (req.body?.text || '').trim().slice(0, 500);
+  if (!text) return res.status(400).json({ error: 'text required' });
+  if (!appSettings.tts?.enabled) return res.status(204).end();
+  if (!elevenLabsKey) return res.status(503).json({ error: 'ElevenLabs key not configured' });
+
+  const voiceId = (appSettings.tts?.voiceId || 'pNInz6obpgDQGcFmaJgB').trim();
+  const body    = JSON.stringify({
+    text,
+    model_id: 'eleven_turbo_v2_5',
+    voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0, use_speaker_boost: true },
+  });
+
+  const elReq = https.request({
+    hostname: 'api.elevenlabs.io',
+    path: `/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+    method: 'POST',
+    headers: {
+      'xi-api-key': elevenLabsKey,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+      'Accept': 'audio/mpeg',
+    },
+  }, elRes => {
+    if (elRes.statusCode !== 200) {
+      const chunks = [];
+      elRes.on('data', d => chunks.push(d));
+      elRes.on('end', () => res.status(502).json({ error: Buffer.concat(chunks).toString().slice(0, 200) }));
+      return;
+    }
+    res.set('Content-Type', 'audio/mpeg');
+    elRes.pipe(res);
+  });
+  elReq.on('error', e => res.status(500).json({ error: e.message }));
+  elReq.write(body);
+  elReq.end();
+});
 
 // ── Sockets ───────────────────────────────────────────────────────────────────
 

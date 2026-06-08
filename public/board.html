@@ -533,6 +533,34 @@
   let prevPhase = null;
   let timerInterval = null;
   let activeTimerEndsAt = null;
+  let lastTTSKey = null;
+  let ttsAudio   = null;
+
+  function stopTTS() {
+    if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; ttsAudio = null; }
+  }
+
+  function speakQuestion(q) {
+    const key = `${q.categoryName}|${q.value}|${q.question}`;
+    if (key === lastTTSKey) return;
+    lastTTSKey = key;
+    stopTTS();
+    const text = `${q.categoryName}, for $${q.value}. ${q.question}`;
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).then(res => {
+      if (!res.ok || res.status === 204) return null;
+      return res.blob();
+    }).then(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      ttsAudio = new Audio(url);
+      ttsAudio.play().catch(() => {});
+      ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio = null; };
+    }).catch(() => {});
+  }
 
   function tickTimer() {
     if (!activeTimerEndsAt) return;
@@ -573,7 +601,14 @@
       else if (state.phase === 'round-over') playRoundOver();
       else if (state.phase === 'game-over') playGameOver();
       else if (state.phase === 'final-question' && prevPhase === 'final-wager') playFinalJeopardy();
+      if (state.phase !== 'question' && state.phase !== 'tiebreaker') stopTTS();
       prevPhase = state.phase;
+    }
+
+    // TTS narration
+    if (state.ttsEnabled && state.currentQuestion &&
+        (state.phase === 'question' || state.phase === 'tiebreaker')) {
+      speakQuestion(state.currentQuestion);
     }
 
     hide('lobby'); hide('game'); hide('overlay'); hide('gameover');
