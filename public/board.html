@@ -259,6 +259,7 @@
                        stroke-dasharray: 163.36; stroke-dashoffset: 0; }
     .timer-ring.ans  { stroke: #ff9933; }
     .timer-ring.lock { stroke: rgba(255,255,255,0.35); }
+    @keyframes tts-pulse { 0%,100% { opacity:.5; transform:scale(1); } 50% { opacity:1; transform:scale(1.2); } }
     #timer-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                  font-family: Impact, sans-serif; font-size: 28px; color: var(--white); }
 
@@ -451,6 +452,10 @@
 <div id="overlay">
   <div id="q-header"></div>
   <div id="q-text"></div>
+  <div id="tts-indicator" style="display:none;align-items:center;gap:10px;opacity:.7;font-size:clamp(13px,1.2vw,18px);letter-spacing:2px;color:var(--gold)">
+    <span id="tts-speaker" style="font-size:1.4em;animation:tts-pulse 1s ease-in-out infinite">🔊</span>
+    <span>LISTENING…</span>
+  </div>
   <div id="q-timer">
     <svg viewBox="0 0 60 60" width="90" height="90">
       <circle class="timer-track" cx="30" cy="30" r="26"/>
@@ -554,12 +559,12 @@
       if (!res.ok || res.status === 204) return null;
       return res.blob();
     }).then(blob => {
-      if (!blob) return;
+      if (!blob) { socket.emit('tts-done'); return; }
       const url = URL.createObjectURL(blob);
       ttsAudio = new Audio(url);
-      ttsAudio.play().catch(() => {});
-      ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio = null; };
-    }).catch(() => {});
+      ttsAudio.play().catch(() => { socket.emit('tts-done'); });
+      ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio = null; socket.emit('tts-done'); };
+    }).catch(() => { socket.emit('tts-done'); });
   }
 
   function tickTimer() {
@@ -579,6 +584,8 @@
 
   function syncTimer() {
     const endsAt = state?.timerEndsAt ?? null;
+    const isTTS  = state?.timerType === 'tts';
+    document.getElementById('tts-indicator').style.display = isTTS ? 'flex' : 'none';
     if (endsAt !== activeTimerEndsAt) {
       clearInterval(timerInterval); timerInterval = null;
       activeTimerEndsAt = endsAt;

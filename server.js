@@ -514,6 +514,7 @@ app.post('/api/tts', (req, res) => {
     hostname: 'api.elevenlabs.io',
     path: `/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
     method: 'POST',
+    rejectUnauthorized: false,
     headers: {
       'xi-api-key': elevenLabsKey,
       'Content-Type': 'application/json',
@@ -521,16 +522,21 @@ app.post('/api/tts', (req, res) => {
       'Accept': 'audio/mpeg',
     },
   }, elRes => {
+    console.log(`[TTS] ElevenLabs responded ${elRes.statusCode} for voice ${voiceId}`);
     if (elRes.statusCode !== 200) {
       const chunks = [];
       elRes.on('data', d => chunks.push(d));
-      elRes.on('end', () => res.status(502).json({ error: Buffer.concat(chunks).toString().slice(0, 200) }));
+      elRes.on('end', () => {
+        const msg = Buffer.concat(chunks).toString().slice(0, 300);
+        console.error('[TTS] ElevenLabs error body:', msg);
+        res.status(502).json({ error: msg });
+      });
       return;
     }
     res.set('Content-Type', 'audio/mpeg');
     elRes.pipe(res);
   });
-  elReq.on('error', e => res.status(500).json({ error: e.message }));
+  elReq.on('error', e => { console.error('[TTS] HTTPS error:', e.message); res.status(500).json({ error: e.message }); });
   elReq.write(body);
   elReq.end();
 });
@@ -1102,15 +1108,44 @@ JSON format (return exactly this structure, no extra text):
     game.buzzedPlayerId = null;
     game.buzzOrder = [];
     game.buzzOpen   = false;
-    game.buzzOpenAt = Date.now() + 8000;
-    game.timerEndsAt = game.buzzOpenAt;
-    game.timerType   = 'lock';
-    lockTimer = setTimeout(() => {
-      game.buzzOpen   = true;
-      game.buzzOpenAt = null;
-      startBuzzTimer();
-      broadcast();
-    }, 8000);
+    game.buzzOpenAt = null;
+
+    const ttsActive = !!(appSettings.tts?.enabled && elevenLabsKey);
+    if (ttsActive) {
+      // Wait for board to signal TTS is done; fallback after 30s
+      game.timerType   = 'tts';
+      game.timerEndsAt = null;
+      lockTimer = setTimeout(() => {
+        if (game.phase === 'question' && !game.buzzOpen) {
+          game.buzzOpen   = true;
+          game.buzzOpenAt = null;
+          game.timerType  = null;
+          startBuzzTimer();
+          broadcast();
+        }
+      }, 30000);
+    } else {
+      game.buzzOpenAt  = Date.now() + 8000;
+      game.timerEndsAt = game.buzzOpenAt;
+      game.timerType   = 'lock';
+      lockTimer = setTimeout(() => {
+        game.buzzOpen   = true;
+        game.buzzOpenAt = null;
+        startBuzzTimer();
+        broadcast();
+      }, 8000);
+    }
+    broadcast();
+  });
+
+  socket.on('tts-done', () => {
+    if ((game.phase !== 'question' && game.phase !== 'tiebreaker') || game.buzzOpen) return;
+    if (game.timerType !== 'tts') return;
+    clearLockTimer();
+    game.buzzOpen   = true;
+    game.buzzOpenAt = null;
+    game.timerType  = null;
+    startBuzzTimer();
     broadcast();
   });
 
