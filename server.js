@@ -24,6 +24,7 @@ let elevenLabsKey = config.ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY 
 
 const PORT = process.env.PORT || 3000;
 const LIBRARY_FILE = path.join(__dirname, 'library.json');
+const LIBRARIES_DIR = path.join(__dirname, 'libraries');
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 const APP_SETTINGS_FILE = path.join(__dirname, 'app-settings.json');
 
@@ -169,32 +170,66 @@ app.post('/host-auth', (req, res) => {
 
 // ── Library (persists to disk) ────────────────────────────────────────────────
 
-function loadLibrary() {
+function listLibraries() {
   try {
-    if (fs.existsSync(LIBRARY_FILE)) {
-      return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
-    }
-  } catch (e) {
-    console.error('Failed to load library.json:', e.message);
+    if (!fs.existsSync(LIBRARIES_DIR)) return ['Default'];
+    const names = fs.readdirSync(LIBRARIES_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(f => f.slice(0, -5))
+      .sort();
+    return names.length ? names : ['Default'];
+  } catch (e) { return ['Default']; }
+}
+
+function activeLibraryPath() {
+  const name = appSettings.activeLibrary || 'Default';
+  return path.join(LIBRARIES_DIR, name + '.json');
+}
+
+function loadLibrary() {
+  if (!fs.existsSync(LIBRARIES_DIR)) {
+    fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
   }
+  // Migrate legacy library.json to named libraries/ on first run
+  if (!appSettings.activeLibrary && fs.existsSync(LIBRARY_FILE)) {
+    try {
+      const legacy = JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+      fs.writeFileSync(path.join(LIBRARIES_DIR, 'Default.json'), JSON.stringify(legacy, null, 2));
+    } catch (e) { console.warn('Library migration failed:', e.message); }
+  }
+  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
+  try {
+    const libPath = activeLibraryPath();
+    if (fs.existsSync(libPath)) return JSON.parse(fs.readFileSync(libPath, 'utf8'));
+    // Fallback to legacy file
+    if (fs.existsSync(LIBRARY_FILE)) return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+  } catch (e) { console.error('Failed to load library:', e.message); }
   const categories = defaultQuestions.map((cat, i) => ({ ...cat, id: i }));
   return { categories, nextId: categories.length, activeIds: categories.map(c => c.id) };
 }
 
 function saveLibrary() {
-  try { fs.writeFileSync(LIBRARY_FILE, JSON.stringify(lib, null, 2)); }
-  catch (e) { console.error('Failed to save library.json:', e.message); }
+  if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
+  try { fs.writeFileSync(activeLibraryPath(), JSON.stringify(lib, null, 2)); }
+  catch (e) { console.error('Failed to save library:', e.message); }
 }
 
 let lib = loadLibrary();
 if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+saveAppSettings(); // persist activeLibrary if it was just set during migration
 
 function generateToken() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
 }
 
 function broadcastLibrary() {
-  io.to('host').emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages });
+  io.to('host').emit('library-state', {
+    categories: lib.categories,
+    activeIds: lib.activeIds,
+    pages: lib.pages,
+    libraries: listLibraries(),
+    activeLibrary: appSettings.activeLibrary || 'Default',
+  });
 }
 
 // ── Game state ────────────────────────────────────────────────────────────────
@@ -566,7 +601,7 @@ io.on('connection', socket => {
   socket.on('join-host', () => {
     socket.join('host');
     socket.emit('host-state', hostState());
-    socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages });
+    socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages, libraries: listLibraries(), activeLibrary: appSettings.activeLibrary || 'Default' });
     socket.emit('player-url', { url: playerUrl(), qr: qrDataUrl, pin: HOST_PIN });
   });
 
@@ -1287,6 +1322,63 @@ JSON format (return exactly this structure, no extra text):
     broadcastLibrary();
   });
 
+  // ── Library pack management ────────────────────────────────────────────────
+
+  socket.on('create-library', ({ name } = {}) => {
+    const safeName = (name || '').trim().replace(/[/\\?%*:|"<>]/g, '').slice(0, 40);
+    if (!safeName) return;
+    const allLibs = listLibraries();
+    if (allLibs.some(l => l.toLowerCase() === safeName.toLowerCase())) {
+      socket.emit('game-error', 'A library with that name already exists.'); return;
+    }
+    if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
+    const empty = { categories: [], nextId: 0, activeIds: [], pages: [{ id: 1, name: 'Page 1' }] };
+    fs.writeFileSync(path.join(LIBRARIES_DIR, safeName + '.json'), JSON.stringify(empty, null, 2));
+    broadcastLibrary();
+  });
+
+  socket.on('switch-library', ({ name } = {}) => {
+    if (!name) return;
+    if (!listLibraries().includes(name)) { socket.emit('game-error', 'Library not found.'); return; }
+    saveLibrary();
+    appSettings.activeLibrary = name;
+    saveAppSettings();
+    lib = loadLibrary();
+    if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+    broadcastLibrary();
+  });
+
+  socket.on('delete-library', ({ name } = {}) => {
+    const allLibs = listLibraries();
+    if (!allLibs.includes(name)) return;
+    if (allLibs.length <= 1) { socket.emit('game-error', 'Cannot delete the only library.'); return; }
+    try { fs.unlinkSync(path.join(LIBRARIES_DIR, name + '.json')); } catch (e) { return; }
+    if (appSettings.activeLibrary === name) {
+      appSettings.activeLibrary = allLibs.find(l => l !== name) || 'Default';
+      saveAppSettings();
+      lib = loadLibrary();
+      if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+    }
+    broadcastLibrary();
+  });
+
+  socket.on('rename-library', ({ oldName, newName } = {}) => {
+    const safeName = (newName || '').trim().replace(/[/\\?%*:|"<>]/g, '').slice(0, 40);
+    const allLibs = listLibraries();
+    if (!safeName || !allLibs.includes(oldName)) return;
+    if (allLibs.some(l => l.toLowerCase() === safeName.toLowerCase() && l !== oldName)) {
+      socket.emit('game-error', 'A library with that name already exists.'); return;
+    }
+    try {
+      fs.renameSync(path.join(LIBRARIES_DIR, oldName + '.json'), path.join(LIBRARIES_DIR, safeName + '.json'));
+    } catch (e) { return; }
+    if (appSettings.activeLibrary === oldName) {
+      appSettings.activeLibrary = safeName;
+      saveAppSettings();
+    }
+    broadcastLibrary();
+  });
+
   socket.on('skip-question', () => {
     if (game.phase !== 'question' && game.phase !== 'tiebreaker' && game.phase !== 'daily-double') return;
     if (game.phase === 'daily-double') { advanceTurn(null); return; }
@@ -1301,6 +1393,16 @@ JSON format (return exactly this structure, no extra text):
   socket.on('adjust-team-score', ({ teamId, delta }) => {
     const team = game.teams.find(t => t.id === teamId);
     if (team) { team.score += delta; broadcast(); }
+  });
+
+  socket.on('set-score', ({ playerId, score }) => {
+    const player = game.players.find(p => p.id === playerId);
+    if (player && typeof score === 'number' && isFinite(score)) { player.score = Math.round(score); broadcast(); }
+  });
+
+  socket.on('set-team-score', ({ teamId, score }) => {
+    const team = game.teams.find(t => t.id === teamId);
+    if (team && typeof score === 'number' && isFinite(score)) { team.score = Math.round(score); broadcast(); }
   });
 
   socket.on('set-theme', ({ theme }) => {
