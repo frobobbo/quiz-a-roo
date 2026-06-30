@@ -83,6 +83,14 @@ function recordGameResult() {
   history.unshift(entry);
   if (history.length > 50) history = history.slice(0, 50);
   saveHistory();
+
+  // Mark each played category in the library so it can be flagged and excluded from future randomization
+  const playedIds = new Set([...game.categories, ...game.round2Categories].map(c => c.id).filter(Boolean));
+  let libChanged = false;
+  lib.categories.forEach(c => {
+    if (playedIds.has(c.id) && !c.played) { c.played = true; libChanged = true; }
+  });
+  if (libChanged) { saveLibrary(); broadcastLibrary(); }
 }
 
 // ── Host PIN auth ─────────────────────────────────────────────────────────────
@@ -93,6 +101,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+app.use((req, res, next) => {
+  if (req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -114,6 +128,71 @@ function requireHost(req, res, next) {
 }
 
 app.get('/api/history', requireHost, (req, res) => res.json(history));
+
+app.get('/api/duplicates', requireHost, (req, res) => {
+  function norm(s) {
+    return (s || '').toLowerCase().trim()
+      .replace(/[.,!?;:'"()\[\]]+/g, '')
+      .replace(/\s+/g, ' ');
+  }
+  function normAnswer(s) {
+    return norm(s).replace(/^(the|a|an) /, '');
+  }
+
+  const cats = lib.categories;
+
+  // Duplicate category names
+  const catMap = new Map();
+  for (const cat of cats) {
+    const key = norm(cat.name);
+    if (!catMap.has(key)) catMap.set(key, []);
+    catMap.get(key).push({ id: cat.id, name: cat.name, questionCount: (cat.questions || []).length });
+  }
+  const dupeCats = [...catMap.values()].filter(g => g.length > 1)
+    .sort((a, b) => b.length - a.length);
+
+  // Duplicate question text
+  const qMap = new Map();
+  for (const cat of cats) {
+    for (let qi = 0; qi < (cat.questions || []).length; qi++) {
+      const q = cat.questions[qi];
+      if (!q.question) continue;
+      const key = norm(q.question);
+      if (!qMap.has(key)) qMap.set(key, []);
+      qMap.get(key).push({ categoryId: cat.id, categoryName: cat.name, questionIdx: qi, question: q.question, answer: q.answer, value: q.value });
+    }
+  }
+  const dupeQs = [...qMap.values()].filter(g => g.length > 1)
+    .sort((a, b) => b.length - a.length);
+
+  // Duplicate answers
+  const aMap = new Map();
+  for (const cat of cats) {
+    for (let qi = 0; qi < (cat.questions || []).length; qi++) {
+      const q = cat.questions[qi];
+      if (!q.answer) continue;
+      const key = normAnswer(q.answer);
+      if (!aMap.has(key)) aMap.set(key, []);
+      aMap.get(key).push({ categoryId: cat.id, categoryName: cat.name, questionIdx: qi, question: q.question, answer: q.answer, value: q.value });
+    }
+  }
+  const dupeAs = [...aMap.values()].filter(g => g.length > 1)
+    .sort((a, b) => b.length - a.length);
+
+  res.json({
+    library: appSettings.activeLibrary || 'Default',
+    stats: {
+      totalCategories: cats.length,
+      totalQuestions:  cats.reduce((s, c) => s + (c.questions || []).length, 0),
+      dupeCatGroups:   dupeCats.length,
+      dupeQGroups:     dupeQs.length,
+      dupeAGroups:     dupeAs.length,
+    },
+    duplicateCategories: dupeCats,
+    duplicateQuestions:  dupeQs,
+    duplicateAnswers:    dupeAs,
+  });
+});
 
 app.get('/settings', requireHost, (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
 
@@ -250,6 +329,8 @@ function freshState() {
     finalWagers: {},
     finalAnswers: {},
     finalJudged: [],
+    finalAnswersLocked: false,
+    allPlayAnswers: {},
     currentQuestion: null,
     buzzedPlayerId: null,
     buzzOrder: [],
@@ -258,16 +339,32 @@ function freshState() {
     buzzOpen: false,
     buzzOpenAt: null,
     dailyDoubleWager: null,
+    dailyDoublePlayerId: null,
+    dailyDoubleCount: 0,
+    isStealOpportunity: false,
+    paused: false,
+    pausedTimerRemaining: null,
+    pausedTimerType: null,
+    scoreHistory: [],
     lockedOutIds: [],
     tiebreakerQuestion: null,
     tiebreakerPlayers: [],
     settings: {
       buzzTime:            d.buzzTime            || 30,
       answerTime:          d.answerTime          || 10,
+      wagerTime:           d.wagerTime           || 30,
       lockoutEnabled:      !!d.lockoutEnabled,
       dailyDoublesEnabled: d.dailyDoublesEnabled !== false,
       teamMode:            !!d.teamMode,
+      allPlayMode:         !!d.allPlayMode,
+      powerUpsEnabled:     !!d.powerUpsEnabled,
+      powerUpCounts: {
+        doubleDown: d.powerUpCounts?.doubleDown ?? 1,
+        shield:     d.powerUpCounts?.shield     ?? 1,
+      },
     },
+    playerPowerUps: {},
+    activePowerUps: {},
     customThemeVars: appSettings.customThemeVars || null,
     currentPage: 1,
     pages: [{ id: 1, name: 'Page 1' }],
@@ -296,8 +393,45 @@ function startBuzzTimer() {
   game.timerType   = 'buzz';
   game.timerEndsAt = Date.now() + ms;
   gameTimer = setTimeout(() => {
-    if ((game.phase === 'question' || game.phase === 'tiebreaker') && !game.buzzedPlayerId) advanceTurn(null);
+    if (game.phase === 'tiebreaker' && !game.buzzedPlayerId) { advanceTurn(null); return; }
+    if (game.phase === 'question' && !game.buzzedPlayerId) {
+      game.timerType   = null;
+      game.timerEndsAt = null;
+      game.phase = game.settings.allPlayMode ? 'all-play-review' : 'answer-reveal';
+      broadcast();
+    }
   }, ms);
+}
+
+function startFinalWagerTimer() {
+  clearGameTimer();
+  const wagerMs = (game.settings.wagerTime || 30) * 1000;
+  game.timerType   = 'final-wager';
+  game.timerEndsAt = Date.now() + wagerMs;
+  gameTimer = setTimeout(() => {
+    if (game.phase !== 'final-wager') return;
+    if (game.settings.teamMode) {
+      game.teams.forEach(t => { if (game.finalWagers[t.id] === undefined) game.finalWagers[t.id] = 0; });
+    } else {
+      game.players.forEach(p => { if (game.finalWagers[p.id] === undefined) game.finalWagers[p.id] = 0; });
+    }
+    game.phase = 'final-question';
+    startFinalAnswerTimer();
+    broadcast();
+  }, wagerMs);
+}
+
+function startFinalAnswerTimer() {
+  clearGameTimer();
+  game.timerType   = 'final-answer';
+  game.timerEndsAt = Date.now() + 30000;
+  gameTimer = setTimeout(() => {
+    if (game.phase !== 'final-question') return;
+    game.finalAnswersLocked = true;
+    game.timerType   = null;
+    game.timerEndsAt = null;
+    broadcast();
+  }, 30000);
 }
 
 function startAnswerTimer() {
@@ -310,7 +444,7 @@ function startAnswerTimer() {
     if (!game.buzzedPlayerId) return;
     const player = game.players.find(p => p.id === game.buzzedPlayerId);
     const points = game.currentQuestion.dailyDouble ? (game.dailyDoubleWager || 0) : game.currentQuestion.value;
-    if (player) player.score -= points;
+    if (player) { snapshotScores(); player.score -= points; }
     game.buzzOrder = game.buzzOrder.filter(id => id !== game.buzzedPlayerId);
     if (game.settings.lockoutEnabled) game.lockedOutIds.push(game.buzzedPlayerId);
     game.buzzedPlayerId = game.buzzOrder[0] ?? null;
@@ -318,6 +452,14 @@ function startAnswerTimer() {
     else advanceTurn(null);
     broadcast();
   }, ms);
+}
+
+function snapshotScores() {
+  game.scoreHistory.push({
+    players: game.players.map(p => ({ id: p.id, score: p.score })),
+    teams:   game.teams.map(t => ({ id: t.id, score: t.score })),
+  });
+  if (game.scoreHistory.length > 20) game.scoreHistory.shift();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -363,6 +505,7 @@ function publicState() {
       categoryName: game.currentQuestion.categoryName,
       value: game.currentQuestion.value,
       question: game.currentQuestion.question,
+      answer: (game.phase === 'answer-reveal' || game.phase === 'all-play-review') ? game.currentQuestion.answer : undefined,
     } : null,
     buzzedPlayerId: game.buzzedPlayerId,
     buzzedPlayerName: game.buzzedPlayerId
@@ -381,8 +524,19 @@ function publicState() {
     finalWagers:  revealFinal
       ? { ...game.finalWagers }
       : Object.fromEntries(game.players.map(p => [p.id, game.finalWagers[p.id] !== undefined])),
-    finalJudged:  [...game.finalJudged],
+    finalJudged:        [...game.finalJudged],
+    finalAnswersLocked: game.finalAnswersLocked,
+    allPlayAnswers: game.phase === 'all-play-review'
+      ? JSON.parse(JSON.stringify(game.allPlayAnswers))
+      : Object.fromEntries(Object.entries(game.allPlayAnswers).map(([id, v]) => [id, { submitted: true, skipped: v.skipped }])),
     dailyDoubleWager: game.dailyDoubleWager,
+    dailyDoublePlayerId: game.dailyDoublePlayerId,
+    dailyDoubleCount: game.dailyDoubleCount,
+    isStealOpportunity: game.isStealOpportunity,
+    paused: game.paused,
+    scoreHistoryLength: game.scoreHistory.length,
+    playerPowerUps: game.settings.powerUpsEnabled ? JSON.parse(JSON.stringify(game.playerPowerUps)) : {},
+    activePowerUps: game.settings.powerUpsEnabled ? JSON.parse(JSON.stringify(game.activePowerUps)) : {},
     lockedOutIds: [...game.lockedOutIds],
     tiebreakerQuestion: game.tiebreakerQuestion
       ? { categoryName: game.tiebreakerQuestion.categoryName, question: game.tiebreakerQuestion.question }
@@ -403,6 +557,7 @@ function hostState() {
     finalWagers: { ...game.finalWagers },
     finalAnswers: { ...game.finalAnswers },
     tiebreakerQuestion: game.tiebreakerQuestion,
+    allPlayAnswers: JSON.parse(JSON.stringify(game.allPlayAnswers)),
   };
 }
 
@@ -489,6 +644,7 @@ function advanceTurn(winnerId) {
   clearGameTimer();
   game.buzzOpen   = false;
   game.buzzOpenAt = null;
+  game.isStealOpportunity = false;
   game.currentQuestion = null;
   game.buzzedPlayerId = null;
   game.buzzOrder = [];
@@ -496,10 +652,12 @@ function advanceTurn(winnerId) {
     if (game.round === 1 && game.round2Categories.length > 0) {
       game.phase = 'round-over';
     } else if (game.finalQuestion) {
-      game.finalWagers  = {};
-      game.finalAnswers = {};
-      game.finalJudged  = [];
+      game.finalWagers        = {};
+      game.finalAnswers       = {};
+      game.finalJudged        = [];
+      game.finalAnswersLocked = false;
       game.phase = 'final-wager';
+      startFinalWagerTimer();
     } else {
       maybeSetGameOver();
     }
@@ -528,6 +686,36 @@ function advanceTurn(winnerId) {
     game.players.forEach((p, i) => { p.isCurrentTurn = i === game.currentPlayerIndex; });
   }
   broadcast();
+}
+
+// ── URL fetcher for AI generation ────────────────────────────────────────────
+
+function fetchUrlText(urlStr) {
+  return new Promise((resolve, reject) => {
+    const mod = urlStr.startsWith('https') ? https : http;
+    const req = mod.get(urlStr, { headers: { 'User-Agent': 'Mozilla/5.0' }, rejectUnauthorized: false }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchUrlText(res.headers.location).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const html = Buffer.concat(chunks).toString('utf8');
+        const text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#\d+;/g, ' ').replace(/&nbsp;/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        resolve(text);
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(12000, () => { req.destroy(); reject(new Error('Timeout fetching URL')); });
+  });
 }
 
 // ── TTS proxy ─────────────────────────────────────────────────────────────────
@@ -863,10 +1051,11 @@ JSON format (return exactly this structure, no extra text):
   socket.on('randomize-game', () => {
     if (game.phase !== 'lobby') return;
 
-    // Eligible = has at least one complete, enabled question
-    const eligible = lib.categories.filter(c =>
-      c.questions.some(q => q.question.trim() && q.answer.trim() && q.enabled !== false)
-    );
+    // Eligible = has at least one complete, enabled question and hasn't been played yet
+    const hasContent = c => c.questions.some(q => q.question.trim() && q.answer.trim() && q.enabled !== false);
+    let eligible = lib.categories.filter(c => hasContent(c) && !c.played);
+    // If all categories have been played, fall back to the full pool
+    if (eligible.length === 0) eligible = lib.categories.filter(hasContent);
 
     if (eligible.length === 0) {
       socket.emit('game-error', 'No categories with questions found.');
@@ -904,6 +1093,13 @@ JSON format (return exactly this structure, no extra text):
     socket.emit('randomize-result', {
       r1: r1Cats.length, r2: r2Cats.length, hasFinal: fjCats.length > 0,
     });
+  });
+
+  socket.on('reset-played-categories', () => {
+    if (game.phase !== 'lobby') return;
+    lib.categories.forEach(c => { delete c.played; });
+    saveLibrary();
+    broadcastLibrary();
   });
 
   socket.on('deactivate-all-categories', () => {
@@ -1009,7 +1205,7 @@ JSON format (return exactly this structure, no extra text):
     assignDailyDoubles(game.categories, 1);
     if (finals.length > 0) {
       const fcat = finals[0];
-      const fq = fcat.questions[0];
+      const fq = fcat.questions[fcat.questions.length - 1];
       game.finalQuestion = { categoryName: fcat.name, question: fq.question, answer: fq.answer };
     } else {
       game.finalQuestion = null;
@@ -1025,12 +1221,26 @@ JSON format (return exactly this structure, no extra text):
     } else {
       game.players[0].isCurrentTurn = true;
     }
+    game.playerPowerUps = {};
+    game.activePowerUps = {};
+    if (game.settings.powerUpsEnabled) {
+      const counts = game.settings.powerUpCounts;
+      game.players.forEach(p => {
+        game.playerPowerUps[p.id] = {
+          doubleDown: counts.doubleDown ?? 1,
+          shield:     counts.shield     ?? 1,
+        };
+      });
+    }
     broadcast();
   });
 
   socket.on('start-round2', () => {
     if (game.phase !== 'round-over') return;
-    game.categories = JSON.parse(JSON.stringify(game.round2Categories));
+    game.categories = JSON.parse(JSON.stringify(game.round2Categories)).map(cat => ({
+      ...cat,
+      questions: cat.questions.map(q => ({ ...q, value: q.value * 2 })),
+    }));
     game.round2Categories = [];
     game.round = 2;
     game.currentPage = game.pages?.[0]?.id || 1;
@@ -1058,18 +1268,18 @@ JSON format (return exactly this structure, no extra text):
       game.finalWagers[teamId] = Math.min(Math.max(parseInt(wager) || 0, 0), max);
       const allWagered = game.teams.every(t => game.finalWagers[t.id] !== undefined);
       broadcast();
-      if (allWagered) { game.phase = 'final-question'; broadcast(); }
+      if (allWagered) { game.phase = 'final-question'; startFinalAnswerTimer(); broadcast(); }
     } else {
       const max = Math.max(player.score, 0);
       game.finalWagers[player.id] = Math.min(Math.max(parseInt(wager) || 0, 0), max);
       const allWagered = game.players.every(p => game.finalWagers[p.id] !== undefined);
       broadcast();
-      if (allWagered) { game.phase = 'final-question'; broadcast(); }
+      if (allWagered) { game.phase = 'final-question'; startFinalAnswerTimer(); broadcast(); }
     }
   });
 
   socket.on('submit-final-answer', ({ answer }) => {
-    if (game.phase !== 'final-question') return;
+    if (game.phase !== 'final-question' || game.finalAnswersLocked) return;
     const player = game.players.find(p => p.id === socket.id);
     if (!player) return;
     if (game.settings.teamMode) {
@@ -1090,11 +1300,13 @@ JSON format (return exactly this structure, no extra text):
       game.players.forEach(p => { if (game.finalWagers[p.id] === undefined) game.finalWagers[p.id] = 0; });
     }
     game.phase = 'final-question';
+    startFinalAnswerTimer();
     broadcast();
   });
 
   socket.on('judge-final', ({ playerId, correct }) => {
     if (game.phase !== 'final-question') return;
+    snapshotScores();
     if (game.settings.teamMode) {
       // playerId is a teamId in team mode
       const teamId = playerId;
@@ -1117,16 +1329,7 @@ JSON format (return exactly this structure, no extra text):
     broadcast();
   });
 
-  socket.on('select-question', ({ categoryIndex, questionIndex }) => {
-    if (game.phase !== 'selecting') return;
-    if (game.settings.teamMode) {
-      const player = game.players.find(p => p.id === socket.id);
-      const curTeam = game.teams[game.currentPlayerIndex];
-      if (!player || !curTeam || player.teamId !== curTeam.id) return;
-    } else {
-      const current = game.players[game.currentPlayerIndex];
-      if (!current || current.id !== socket.id) return;
-    }
+  function doSelectQuestion(categoryIndex, questionIndex) {
     const cat = game.categories[categoryIndex];
     const q = cat?.questions[questionIndex];
     if (!q || q.used) return;
@@ -1137,10 +1340,13 @@ JSON format (return exactly this structure, no extra text):
       dailyDouble: q.dailyDouble || false,
     };
     game.lockedOutIds = [];
+    game.allPlayAnswers = {};
 
-    if (q.dailyDouble) {
+    if (q.dailyDouble && !game.settings.allPlayMode) {
       game.phase = 'daily-double';
       game.dailyDoubleWager = null;
+      game.dailyDoublePlayerId = null;
+      game.dailyDoubleCount++;
       game.buzzedPlayerId = null;
       game.buzzOrder = [];
       game.buzzOpen = false;
@@ -1158,8 +1364,26 @@ JSON format (return exactly this structure, no extra text):
     game.buzzOpenAt = null;
 
     const ttsActive = !!(appSettings.tts?.enabled && elevenLabsKey);
+
+    if (game.settings.allPlayMode) {
+      if (ttsActive) {
+        game.timerType   = 'tts';
+        game.timerEndsAt = null;
+        lockTimer = setTimeout(() => {
+          if (game.phase === 'question' && game.timerType === 'tts') {
+            game.timerType = null;
+            startBuzzTimer();
+            broadcast();
+          }
+        }, 30000);
+      } else {
+        startBuzzTimer();
+      }
+      broadcast();
+      return;
+    }
+
     if (ttsActive) {
-      // Wait for board to signal TTS is done; fallback after 30s
       game.timerType   = 'tts';
       game.timerEndsAt = null;
       lockTimer = setTimeout(() => {
@@ -1183,16 +1407,42 @@ JSON format (return exactly this structure, no extra text):
       }, 8000);
     }
     broadcast();
+  }
+
+  socket.on('select-question', ({ categoryIndex, questionIndex }) => {
+    if (game.phase !== 'selecting') return;
+    if (game.settings.teamMode) {
+      const player = game.players.find(p => p.id === socket.id);
+      const curTeam = game.teams[game.currentPlayerIndex];
+      if (!player || !curTeam || player.teamId !== curTeam.id) return;
+    } else {
+      const current = game.players[game.currentPlayerIndex];
+      if (!current || current.id !== socket.id) return;
+    }
+    doSelectQuestion(categoryIndex, questionIndex);
+  });
+
+  socket.on('host-select-question', ({ categoryIndex, questionIndex }) => {
+    if (game.phase !== 'selecting') return;
+    doSelectQuestion(categoryIndex, questionIndex);
   });
 
   socket.on('tts-done', () => {
     if ((game.phase !== 'question' && game.phase !== 'tiebreaker') || game.buzzOpen) return;
     if (game.timerType !== 'tts') return;
     clearLockTimer();
-    game.buzzOpen   = true;
-    game.buzzOpenAt = null;
     game.timerType  = null;
-    startBuzzTimer();
+    if (game.currentQuestion?.dailyDouble) {
+      game.buzzOpen = false;
+      startAnswerTimer();
+    } else if (game.settings.allPlayMode) {
+      game.buzzOpen = false;
+      startBuzzTimer();
+    } else {
+      game.buzzOpen   = true;
+      game.buzzOpenAt = null;
+      startBuzzTimer();
+    }
     broadcast();
   });
 
@@ -1226,14 +1476,26 @@ JSON format (return exactly this structure, no extra text):
       : game.currentQuestion.value;
     const team = game.settings.teamMode ? game.teams.find(t => t.id === player.teamId) : null;
     const lockId = game.settings.teamMode ? player.teamId : player.id;
+    snapshotScores();
     if (correct) {
       io.emit('sound-cue', 'correct');
-      if (team) team.score += points; else player.score += points;
+      game.isStealOpportunity = false;
+      let effectivePoints = points;
+      if (game.settings.powerUpsEnabled && game.activePowerUps[player.id]?.doubleDown) {
+        effectivePoints = points * 2;
+        delete game.activePowerUps[player.id].doubleDown;
+      }
+      if (team) team.score += effectivePoints; else player.score += effectivePoints;
       if (game.phase === 'tiebreaker') { game.phase = 'game-over'; broadcast(); return; }
       advanceTurn(player.id);
     } else {
       io.emit('sound-cue', 'wrong');
-      if (team) team.score -= points; else player.score -= points;
+      const shielded = game.settings.powerUpsEnabled && !!game.activePowerUps[player.id]?.shield;
+      if (shielded) {
+        delete game.activePowerUps[player.id].shield;
+      } else {
+        if (team) team.score -= points; else player.score -= points;
+      }
       if (game.settings.lockoutEnabled || game.currentQuestion.dailyDouble || game.phase === 'tiebreaker') {
         if (lockId) game.lockedOutIds.push(lockId);
       }
@@ -1242,7 +1504,6 @@ JSON format (return exactly this structure, no extra text):
         return;
       }
       if (game.phase === 'tiebreaker') {
-        // All tied players locked out → game over
         const allOut = game.tiebreakerPlayers.every(id => game.lockedOutIds.includes(id));
         game.buzzOrder      = game.buzzOrder.filter(id => id !== game.buzzedPlayerId);
         game.buzzedPlayerId = game.buzzOrder[0] ?? null;
@@ -1251,6 +1512,7 @@ JSON format (return exactly this structure, no extra text):
         broadcast();
         return;
       }
+      game.isStealOpportunity = true;
       game.buzzOrder      = game.buzzOrder.filter(id => id !== game.buzzedPlayerId);
       game.buzzedPlayerId = game.buzzOrder[0] ?? null;
       if (game.buzzedPlayerId) startAnswerTimer(); else startBuzzTimer();
@@ -1258,26 +1520,49 @@ JSON format (return exactly this structure, no extra text):
     }
   });
 
+  socket.on('host-pick-dd-player', ({ playerId }) => {
+    if (game.phase !== 'daily-double') return;
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return;
+    game.dailyDoublePlayerId = playerId;
+    broadcast();
+  });
+
   socket.on('submit-daily-double-wager', ({ wager }) => {
     if (game.phase !== 'daily-double') return;
+    if (!game.dailyDoublePlayerId) return; // host must pick a player first
+    const ddPlayer = game.players.find(p => p.id === game.dailyDoublePlayerId);
+    if (!ddPlayer || ddPlayer.id !== socket.id) return;
     if (game.settings.teamMode) {
-      const player = game.players.find(p => p.id === socket.id);
-      const curTeam = game.teams[game.currentPlayerIndex];
-      if (!player || !curTeam || player.teamId !== curTeam.id) return;
-      const max = Math.max(curTeam.score, game.currentQuestion.value);
+      const team = game.teams.find(t => t.id === ddPlayer.teamId);
+      const max = Math.max(team ? team.score : 0, game.currentQuestion.value);
       game.dailyDoubleWager = Math.min(Math.max(parseInt(wager) || 0, 0), max);
     } else {
-      const current = game.players[game.currentPlayerIndex];
-      if (!current || current.id !== socket.id) return;
-      const max = Math.max(current.score, game.currentQuestion.value);
+      const max = Math.max(ddPlayer.score, game.currentQuestion.value);
       game.dailyDoubleWager = Math.min(Math.max(parseInt(wager) || 0, 0), max);
     }
     game.phase = 'question';
-    game.buzzedPlayerId = socket.id;
-    game.buzzOrder = [socket.id];
-    game.buzzOpen = true;
+    game.buzzedPlayerId = game.dailyDoublePlayerId;
+    game.buzzOrder = [game.dailyDoublePlayerId];
     game.lockedOutIds = [];
-    startAnswerTimer();
+
+    const ttsActive = !!(appSettings.tts?.enabled && elevenLabsKey);
+    if (ttsActive) {
+      game.buzzOpen    = false;
+      game.timerType   = 'tts';
+      game.timerEndsAt = null;
+      lockTimer = setTimeout(() => {
+        if (game.phase === 'question' && !game.buzzOpen) {
+          game.buzzOpen    = true;
+          game.timerType   = null;
+          startAnswerTimer();
+          broadcast();
+        }
+      }, 30000);
+    } else {
+      game.buzzOpen = true;
+      startAnswerTimer();
+    }
     broadcast();
   });
 
@@ -1285,10 +1570,77 @@ JSON format (return exactly this structure, no extra text):
     if (game.phase !== 'lobby') return;
     if (s.buzzTime !== undefined)         game.settings.buzzTime         = Math.min(Math.max(parseInt(s.buzzTime) || 30, 5), 120);
     if (s.answerTime !== undefined)       game.settings.answerTime       = Math.min(Math.max(parseInt(s.answerTime) || 10, 5), 60);
+    if (s.wagerTime !== undefined)        game.settings.wagerTime        = Math.min(Math.max(parseInt(s.wagerTime) || 30, 10), 60);
     if (s.lockoutEnabled !== undefined)   game.settings.lockoutEnabled   = !!s.lockoutEnabled;
     if (s.dailyDoublesEnabled !== undefined) game.settings.dailyDoublesEnabled = !!s.dailyDoublesEnabled;
     if (s.teamMode !== undefined)         game.settings.teamMode         = !!s.teamMode;
+    if (s.allPlayMode !== undefined)      game.settings.allPlayMode      = !!s.allPlayMode;
+    if (s.powerUpsEnabled !== undefined)  game.settings.powerUpsEnabled  = !!s.powerUpsEnabled;
+    if (s.powerUpCounts && typeof s.powerUpCounts === 'object') {
+      game.settings.powerUpCounts = {
+        doubleDown: Math.min(Math.max(parseInt(s.powerUpCounts.doubleDown) || 0, 0), 5),
+        shield:     Math.min(Math.max(parseInt(s.powerUpCounts.shield)     || 0, 0), 5),
+      };
+    }
     broadcast();
+  });
+
+  socket.on('toggle-game-mode', () => {
+    game.settings.allPlayMode = !game.settings.allPlayMode;
+    broadcast();
+  });
+
+  socket.on('submit-all-play', ({ answer, skip }) => {
+    if (game.phase !== 'question' || !game.settings.allPlayMode) return;
+    const player = game.players.find(p => p.id === socket.id);
+    if (!player) return;
+    const id = game.settings.teamMode ? player.teamId : player.id;
+    if (!id || game.allPlayAnswers[id] !== undefined) return;
+    game.allPlayAnswers[id] = {
+      answer: skip ? null : (answer || '').trim().slice(0, 200),
+      skipped: !!skip,
+      result: null,
+    };
+    const participants = game.settings.teamMode ? game.teams : game.players;
+    const allDone = participants.every(p => game.allPlayAnswers[p.id] !== undefined);
+    broadcast();
+    if (allDone) {
+      clearGameTimer();
+      clearLockTimer();
+      game.timerType   = null;
+      game.timerEndsAt = null;
+      game.phase = 'all-play-review';
+      broadcast();
+    }
+  });
+
+  socket.on('judge-all-play', ({ id, result }) => {
+    if (game.phase !== 'all-play-review') return;
+    snapshotScores();
+    const entry = game.allPlayAnswers[id];
+    if (!entry || entry.result !== null) return;
+    if (!['correct', 'incorrect', 'skip'].includes(result)) return;
+    entry.result = result;
+    const val = game.currentQuestion?.value || 0;
+    if (game.settings.teamMode) {
+      const team = game.teams.find(t => t.id === id);
+      if (team) {
+        if (result === 'correct')   { team.score += val; game.players.filter(p => p.teamId === id).forEach(p => p.score += val); }
+        if (result === 'incorrect') { team.score -= val; game.players.filter(p => p.teamId === id).forEach(p => p.score -= val); }
+      }
+    } else {
+      const player = game.players.find(p => p.id === id);
+      if (player) {
+        if (result === 'correct')   player.score += val;
+        if (result === 'incorrect') player.score -= val;
+      }
+    }
+    broadcast();
+  });
+
+  socket.on('finish-all-play', () => {
+    if (game.phase !== 'all-play-review') return;
+    advanceTurn(null);
   });
 
   socket.on('duplicate-category', ({ id }) => {
@@ -1385,24 +1737,69 @@ JSON format (return exactly this structure, no extra text):
     advanceTurn(null);
   });
 
+  socket.on('dismiss-answer-reveal', () => {
+    if (game.phase !== 'answer-reveal') return;
+    advanceTurn(null);
+  });
+
+  socket.on('undo-last-score', () => {
+    const snap = game.scoreHistory.pop();
+    if (!snap) return;
+    snap.players.forEach(s => { const p = game.players.find(p => p.id === s.id); if (p) p.score = s.score; });
+    snap.teams.forEach(s => { const t = game.teams.find(t => t.id === s.id); if (t) t.score = s.score; });
+    broadcast();
+  });
+
+  socket.on('toggle-pause', () => {
+    if (!['question', 'tiebreaker'].includes(game.phase)) return;
+    if (!game.paused) {
+      game.pausedTimerType      = game.timerType;
+      game.pausedTimerRemaining = game.timerEndsAt ? Math.max(0, game.timerEndsAt - Date.now()) : null;
+      if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
+      game.timerEndsAt = null;
+      game.paused = true;
+    } else {
+      game.paused = false;
+      if (game.pausedTimerRemaining !== null && game.pausedTimerType) {
+        const ms   = game.pausedTimerRemaining;
+        const type = game.pausedTimerType;
+        game.timerType   = type;
+        game.timerEndsAt = Date.now() + ms;
+        game.pausedTimerRemaining = null;
+        game.pausedTimerType      = null;
+        gameTimer = setTimeout(() => {
+          if (game.paused) return;
+          if (type === 'buzz' && game.phase === 'question' && !game.buzzedPlayerId) {
+            game.timerType = null; game.timerEndsAt = null;
+            game.phase = game.settings.allPlayMode ? 'all-play-review' : 'answer-reveal';
+            broadcast();
+          } else if (type === 'answer' && (game.phase === 'question' || game.phase === 'tiebreaker') && game.buzzedPlayerId) {
+            advanceTurn(null);
+          }
+        }, ms);
+      }
+    }
+    broadcast();
+  });
+
   socket.on('adjust-score', ({ playerId, delta }) => {
     const player = game.players.find(p => p.id === playerId);
-    if (player) { player.score += delta; broadcast(); }
+    if (player) { snapshotScores(); player.score += delta; broadcast(); }
   });
 
   socket.on('adjust-team-score', ({ teamId, delta }) => {
     const team = game.teams.find(t => t.id === teamId);
-    if (team) { team.score += delta; broadcast(); }
+    if (team) { snapshotScores(); team.score += delta; broadcast(); }
   });
 
   socket.on('set-score', ({ playerId, score }) => {
     const player = game.players.find(p => p.id === playerId);
-    if (player && typeof score === 'number' && isFinite(score)) { player.score = Math.round(score); broadcast(); }
+    if (player && typeof score === 'number' && isFinite(score)) { snapshotScores(); player.score = Math.round(score); broadcast(); }
   });
 
   socket.on('set-team-score', ({ teamId, score }) => {
     const team = game.teams.find(t => t.id === teamId);
-    if (team && typeof score === 'number' && isFinite(score)) { team.score = Math.round(score); broadcast(); }
+    if (team && typeof score === 'number' && isFinite(score)) { snapshotScores(); team.score = Math.round(score); broadcast(); }
   });
 
   socket.on('set-theme', ({ theme }) => {
@@ -1416,6 +1813,80 @@ JSON format (return exactly this structure, no extra text):
     game.customThemeVars = vars;
     game.theme = 'custom';
     io.emit('game-state', publicState());
+  });
+
+  socket.on('use-power-up', ({ type }) => {
+    if (!['doubleDown', 'shield'].includes(type)) return;
+    if (!game.settings.powerUpsEnabled) return;
+    const player = game.players.find(p => p.id === socket.id);
+    if (!player) return;
+    const pu = game.playerPowerUps[socket.id];
+    if (!pu || !(pu[type] > 0)) return;
+    pu[type]--;
+    if (!game.activePowerUps[socket.id]) game.activePowerUps[socket.id] = {};
+    game.activePowerUps[socket.id][type] = true;
+    broadcast();
+  });
+
+  socket.on('cancel-power-up', ({ type }) => {
+    if (!['doubleDown', 'shield'].includes(type)) return;
+    if (!game.settings.powerUpsEnabled) return;
+    const player = game.players.find(p => p.id === socket.id);
+    if (!player) return;
+    if (game.activePowerUps[socket.id]?.[type]) {
+      delete game.activePowerUps[socket.id][type];
+      if (!game.playerPowerUps[socket.id]) game.playerPowerUps[socket.id] = {};
+      game.playerPowerUps[socket.id][type] = (game.playerPowerUps[socket.id][type] || 0) + 1;
+      broadcast();
+    }
+  });
+
+  socket.on('rematch', () => {
+    if (!io.sockets.adapter.rooms.get('host')?.has(socket.id)) return;
+    clearLockTimer();
+    if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
+    const prevTheme    = game.theme;
+    const prevPlayers  = game.players.map(p => ({ ...p, score: 0, isCurrentTurn: false }));
+    const prevTeams    = game.teams.map(t => ({ ...t, score: 0, isCurrentTurn: false }));
+    const prevSettings = { ...game.settings };
+    game = freshState();
+    game.theme    = prevTheme;
+    game.players  = prevPlayers;
+    game.teams    = prevTeams;
+    game.settings = prevSettings;
+    gameResultSaved = false;
+    broadcast();
+  });
+
+  socket.on('generate-category-from-source', async ({ source, sourceType, catName }) => {
+    if (!anthropic) {
+      socket.emit('gen-source-error', { message: 'Anthropic API not configured. Add your key to config.json.' });
+      return;
+    }
+    try {
+      let contextText = '';
+      if (sourceType === 'url') {
+        contextText = await fetchUrlText((source || '').trim());
+      } else {
+        contextText = (source || '').trim();
+      }
+      if (!contextText) { socket.emit('gen-source-error', { message: 'No content provided.' }); return; }
+      const nameHint = catName ? ` Name the category "${catName.trim()}" unless a more fitting name exists.` : '';
+      const userContent = sourceType === 'url'
+        ? `Based on this webpage content, create exactly 1 Jeopardy! category.${nameHint} Focus on specific, testable facts:\n\n${contextText.slice(0, 4000)}`
+        : `Create exactly 1 Jeopardy! category about: "${contextText}".${nameHint}`;
+      const msg = await anthropic.messages.create({
+        model: 'claude-opus-4-8',
+        max_tokens: 2000,
+        system: `You are an expert Jeopardy! question writer. Create exactly one category with 5 clues at $200, $400, $600, $800, $1000 escalating in difficulty. Clues must be statements answered with "What is/Who is ___?". Return ONLY valid JSON, no markdown: {"name":"CATEGORY NAME","questions":[{"value":200,"question":"clue","answer":"answer"},{"value":400,"question":"clue","answer":"answer"},{"value":600,"question":"clue","answer":"answer"},{"value":800,"question":"clue","answer":"answer"},{"value":1000,"question":"clue","answer":"answer"}]}`,
+        messages: [{ role: 'user', content: userContent }],
+      });
+      const raw = msg.content[0].text.trim().replace(/^```[^\n]*\n?/, '').replace(/```\s*$/, '');
+      const data = JSON.parse(raw);
+      socket.emit('gen-source-result', { category: data });
+    } catch (e) {
+      socket.emit('gen-source-error', { message: e.message || 'Generation failed.' });
+    }
   });
 
   socket.on('reset-game', () => {

@@ -280,22 +280,104 @@
       z-index: 100;
       gap: 24px;
       text-align: center;
+      transition: background 0.3s;
     }
     #dd-flash {
       font-family: Impact, sans-serif;
       font-size: clamp(56px, 10vw, 120px);
-      color: var(--gold);
       letter-spacing: 6px;
-      animation: dd-appear 0.5s cubic-bezier(.2,1.4,.5,1) forwards;
     }
     #dd-who {
       font-size: clamp(22px, 3.5vw, 40px);
       opacity: .8;
     }
-    @keyframes dd-appear {
+
+    /* Style 1 — Gold Bounce (classic) */
+    #daily-double-overlay.dd-s1 { background: #0a0800; }
+    #daily-double-overlay.dd-s1 #dd-flash {
+      color: var(--gold);
+      text-shadow: 0 0 40px rgba(192,154,56,.6);
+      animation: dd-bounce 0.55s cubic-bezier(.2,1.4,.5,1) forwards;
+    }
+    @keyframes dd-bounce {
       0%   { transform: scale(0.3) rotate(-8deg); opacity: 0; }
-      70%  { transform: scale(1.05) rotate(1deg); opacity: 1; }
+      70%  { transform: scale(1.08) rotate(1deg); opacity: 1; }
       100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* Style 2 — Electric Shock */
+    #daily-double-overlay.dd-s2 { background: #000c1a; }
+    #daily-double-overlay.dd-s2 #dd-flash {
+      color: #00dfff;
+      text-shadow: 0 0 20px #00dfff, 0 0 50px #007fff, 0 0 90px #00cfff;
+      animation: dd-shock 0.6s ease-out forwards;
+    }
+    #daily-double-overlay.dd-s2 #dd-who { color: #7ef0ff; }
+    @keyframes dd-shock {
+      0%   { transform: scale(1.6); opacity: 0; filter: blur(12px); }
+      30%  { transform: scale(0.92) skewX(-4deg); opacity: 1; filter: blur(0); }
+      50%  { transform: scale(1.04) skewX(3deg); }
+      70%  { transform: scale(0.98) skewX(-1deg); }
+      100% { transform: scale(1) skewX(0); opacity: 1; }
+    }
+
+    /* Style 3 — Fire Spin */
+    #daily-double-overlay.dd-s3 { background: #100000; }
+    #daily-double-overlay.dd-s3 #dd-flash {
+      background: linear-gradient(90deg, #ff4500, #ff8c00, #ffd700, #ff6600, #ff4500);
+      background-size: 300%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: dd-fire-in 0.5s cubic-bezier(.1,1.3,.4,1) forwards, dd-fire-shift 1.4s linear 0.5s infinite;
+    }
+    #daily-double-overlay.dd-s3 #dd-who { color: #ffb347; }
+    @keyframes dd-fire-in {
+      0%   { transform: scale(0.2) rotate(-15deg); opacity: 0; }
+      80%  { transform: scale(1.06) rotate(3deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    @keyframes dd-fire-shift {
+      0%   { background-position: 0% 50%; }
+      100% { background-position: 300% 50%; }
+    }
+
+    /* ── STEAL ── */
+    #steal-flash {
+      display: none;
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      font-family: Impact, sans-serif;
+      font-size: clamp(48px, 9vw, 108px);
+      color: #ff4040;
+      text-shadow: 0 0 30px rgba(255,60,60,.7), 0 0 60px rgba(255,0,0,.4);
+      letter-spacing: 6px;
+      z-index: 150;
+      pointer-events: none;
+      animation: steal-in 0.4s cubic-bezier(.2,1.4,.5,1) forwards;
+    }
+    @keyframes steal-in {
+      0%   { transform: translate(-50%,-50%) scale(0.4) rotate(-6deg); opacity: 0; }
+      70%  { transform: translate(-50%,-50%) scale(1.06) rotate(1deg); opacity: 1; }
+      100% { transform: translate(-50%,-50%) scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* ── CONFETTI ── */
+    .confetti-piece { position: absolute; top: -20px; border-radius: 2px; animation: confetti-fall linear forwards; }
+    @keyframes confetti-fall {
+      0%   { transform: translateY(0) rotate(0deg) scaleX(1); opacity: 1; }
+      80%  { opacity: 1; }
+      100% { transform: translateY(105vh) rotate(900deg) scaleX(-1); opacity: 0; }
+    }
+
+    /* ── GAME OVER ── */
+    @keyframes go-title-in {
+      0%   { transform: scale(0.4); opacity: 0; }
+      70%  { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes pause-slide {
+      from { transform: translateY(-100%); }
+      to   { transform: translateY(0); }
     }
 
     /* ── SCOREBOARD ANIMATION ── */
@@ -453,6 +535,7 @@
 <div id="overlay">
   <div id="q-header"></div>
   <div id="q-text"></div>
+  <div id="q-answer-reveal" style="display:none;font-family:Impact,sans-serif;font-size:clamp(22px,3.5vw,52px);color:#5acc80;letter-spacing:2px;text-align:center;max-width:900px"></div>
   <div id="tts-indicator" style="display:none;align-items:center;gap:10px;opacity:.7;font-size:clamp(13px,1.2vw,18px);letter-spacing:2px;color:var(--gold)">
     <span id="tts-speaker" style="font-size:1.4em;animation:tts-pulse 1s ease-in-out infinite">🔊</span>
     <span>LISTENING…</span>
@@ -465,6 +548,7 @@
     <span id="timer-num">30</span>
   </div>
   <div id="buzz-display"></div>
+  <div id="steal-flash">STEAL!</div>
 </div>
 
 <!-- DAILY DOUBLE -->
@@ -473,11 +557,17 @@
   <div id="dd-who"></div>
 </div>
 
+<!-- CONFETTI -->
+<div id="confetti-container" style="position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:300"></div>
+
 <!-- GAME OVER -->
 <div id="gameover">
-  <h2>Game Over!</h2>
+  <div id="gameover-title" style="font-family:Impact,sans-serif;font-size:clamp(28px,5vw,60px);letter-spacing:4px;color:var(--gold);animation:go-title-in 0.7s cubic-bezier(.2,1.3,.4,1) forwards"></div>
   <div id="final-scores"></div>
 </div>
+
+<!-- PAUSE BANNER -->
+<div id="pause-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);padding:14px;text-align:center;font-family:Impact,sans-serif;font-size:clamp(22px,3vw,40px);letter-spacing:4px;color:#fff;animation:pause-slide 0.3s ease-out">⏸ PAUSED</div>
 
 <!-- ROUND OVER (between rounds) -->
 <div id="round-over">
@@ -490,6 +580,13 @@
 <div id="final">
   <div id="final-title">FINAL JEOPARDY</div>
   <div id="final-category"></div>
+  <div id="final-timer" style="display:none;position:relative;width:90px;height:90px;flex-shrink:0">
+    <svg viewBox="0 0 60 60" width="90" height="90" style="transform:rotate(-90deg)">
+      <circle class="timer-track" cx="30" cy="30" r="26"/>
+      <circle class="timer-ring" id="final-timer-ring" cx="30" cy="30" r="26"/>
+    </svg>
+    <span id="final-timer-num" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Impact,sans-serif;font-size:clamp(18px,2.5vw,32px);color:var(--white)">30</span>
+  </div>
   <div id="final-question-text"></div>
   <div id="final-wager-status"></div>
 </div>
@@ -537,6 +634,7 @@
 
   let prevBuzzId = null;
   let prevPhase = null;
+  let prevDDCount = 0;
   let timerInterval = null;
   let activeTimerEndsAt = null;
   let lastTTSKey = null;
@@ -577,21 +675,34 @@
   function tickTimer() {
     if (!activeTimerEndsAt) return;
     const type  = state?.timerType;
+    const isFinal = type === 'final-wager' || type === 'final-answer';
     const buzzMs   = (state?.settings?.buzzTime   || 30) * 1000;
     const answerMs = (state?.settings?.answerTime || 10) * 1000;
-    const total = type === 'answer' ? answerMs : type === 'lock' ? 8000 : buzzMs;
+    const total = type === 'answer' ? answerMs
+      : type === 'lock'         ? 8000
+      : type === 'final-wager'  ? 10000
+      : type === 'final-answer' ? 30000
+      : buzzMs;
     const remaining = Math.max(0, activeTimerEndsAt - Date.now());
     const pct = remaining / total;
     const secs = Math.ceil(remaining / 1000);
-    document.getElementById('timer-ring').style.strokeDashoffset = 163.36 * (1 - pct);
-    document.getElementById('timer-num').textContent = secs;
-    document.getElementById('timer-ring').className = 'timer-ring' + (type === 'answer' ? ' ans' : type === 'lock' ? ' lock' : '');
+    if (isFinal) {
+      document.getElementById('final-timer-ring').style.strokeDashoffset = 163.36 * (1 - pct);
+      document.getElementById('final-timer-num').textContent = secs;
+      document.getElementById('final-timer-ring').className = 'timer-ring ans';
+    } else {
+      document.getElementById('timer-ring').style.strokeDashoffset = 163.36 * (1 - pct);
+      document.getElementById('timer-num').textContent = secs;
+      document.getElementById('timer-ring').className = 'timer-ring' + (type === 'answer' ? ' ans' : type === 'lock' ? ' lock' : '');
+    }
     if (remaining <= 0) { clearInterval(timerInterval); timerInterval = null; }
   }
 
   function syncTimer() {
     const endsAt = state?.timerEndsAt ?? null;
-    const isTTS  = state?.timerType === 'tts';
+    const type   = state?.timerType;
+    const isTTS   = type === 'tts';
+    const isFinal = type === 'final-wager' || type === 'final-answer';
     document.getElementById('tts-indicator').style.display = isTTS ? 'flex' : 'none';
     if (endsAt !== activeTimerEndsAt) {
       clearInterval(timerInterval); timerInterval = null;
@@ -599,9 +710,11 @@
       if (endsAt) {
         tickTimer();
         timerInterval = setInterval(tickTimer, 100);
-        document.getElementById('q-timer').style.display = 'flex';
+        document.getElementById('q-timer').style.display = isFinal ? 'none' : 'flex';
+        document.getElementById('final-timer').style.display = isFinal ? 'flex' : 'none';
       } else {
         document.getElementById('q-timer').style.display = 'none';
+        document.getElementById('final-timer').style.display = 'none';
       }
     }
   }
@@ -625,10 +738,16 @@
       speakQuestion(state.currentQuestion);
     }
 
+    // Pause banner
+    document.getElementById('pause-banner').style.display = state.paused ? 'block' : 'none';
+    // Stop timer ticking while paused
+    if (state.paused && timerInterval) { clearInterval(timerInterval); timerInterval = null; activeTimerEndsAt = null; }
+
     hide('lobby'); hide('game'); hide('overlay'); hide('gameover');
     hide('round-over'); hide('final'); hide('daily-double-overlay');
 
     if (state.phase === 'lobby') {
+      confettiLaunched = false;
       renderLobby();
     } else if (state.phase === 'game-over') {
       renderGameOver();
@@ -640,7 +759,7 @@
       renderDailyDouble();
     } else {
       renderBoard();
-      if (state.phase === 'question' || state.phase === 'tiebreaker') renderOverlay();
+      if (state.phase === 'question' || state.phase === 'tiebreaker' || state.phase === 'answer-reveal' || state.phase === 'all-play-review') renderOverlay();
       else syncTimer();
     }
   }
@@ -709,25 +828,41 @@
     const rows = pageCats[0]?.questions.length ?? 5;
     grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     grid.style.gridTemplateRows = `auto repeat(${rows}, 1fr)`;
-    grid.innerHTML = '';
 
-    // Category headers
-    pageCats.forEach(cat => {
-      const el = document.createElement('div');
-      el.className = 'cat-header';
-      el.textContent = cat.name;
-      grid.appendChild(el);
-    });
+    // Rebuild only when structure changes (page switch or first render); otherwise patch used state in place
+    const expectedChildren = cols + cols * rows;
+    if (grid.children.length !== expectedChildren) {
+      grid.innerHTML = '';
 
-    // Value tiles
-    for (let row = 0; row < rows; row++) {
       pageCats.forEach(cat => {
-        const q = cat.questions[row];
         const el = document.createElement('div');
-        el.className = `q-tile${q.used ? ' used' : ''}`;
-        el.textContent = q.used ? '' : `$${q.value}`;
+        el.className = 'cat-header';
+        el.textContent = cat.name;
         grid.appendChild(el);
       });
+
+      for (let row = 0; row < rows; row++) {
+        pageCats.forEach(cat => {
+          const q = cat.questions[row];
+          const el = document.createElement('div');
+          el.className = `q-tile${q.used ? ' used' : ''}`;
+          el.textContent = q.used ? '' : `$${q.value}`;
+          grid.appendChild(el);
+        });
+      }
+    } else {
+      // Patch only the tile used-state without touching headers or scroll
+      const tiles = grid.querySelectorAll('.q-tile');
+      let i = 0;
+      for (let row = 0; row < rows; row++) {
+        pageCats.forEach(cat => {
+          const q = cat.questions[row];
+          const el = tiles[i++];
+          const used = q.used;
+          el.classList.toggle('used', used);
+          el.textContent = used ? '' : `$${q.value}`;
+        });
+      }
     }
 
     // Turn bar
@@ -739,17 +874,37 @@
   }
 
   function renderDailyDouble() {
+    const overlay = document.getElementById('daily-double-overlay');
+    const style = ((state.dailyDoubleCount - 1) % 3) + 1;
+    // Only swap class and retrigger animation when a new DD starts
+    if (state.dailyDoubleCount !== prevDDCount) {
+      prevDDCount = state.dailyDoubleCount;
+      overlay.className = '';
+      // Force reflow so removing/re-adding the class restarts the animation
+      void overlay.offsetWidth;
+      overlay.className = `dd-s${style}`;
+    }
     show('daily-double-overlay', 'flex');
-    const current = state.settings?.teamMode
-      ? state.teams?.[state.currentPlayerIndex]
-      : state.players[state.currentPlayerIndex];
-    document.getElementById('dd-who').textContent =
-      current ? `${current.name.toUpperCase()} is placing their wager…` : '';
+
+    let whoText = '';
+    if (state.dailyDoublePlayerId) {
+      const ddPlayer = state.settings?.teamMode && state.teams?.length
+        ? state.teams.find(t => t.id === state.dailyDoublePlayerId)
+        : state.players.find(p => p.id === state.dailyDoublePlayerId);
+      if (ddPlayer) whoText = `${ddPlayer.name.toUpperCase()} is placing their wager…`;
+    } else {
+      const current = state.settings?.teamMode
+        ? state.teams?.[state.currentPlayerIndex]
+        : state.players[state.currentPlayerIndex];
+      if (current) whoText = `${current.name.toUpperCase()} found a Daily Double!`;
+    }
+    document.getElementById('dd-who').textContent = whoText;
   }
 
   function renderOverlay() {
     show('overlay');
     const q = state.currentQuestion;
+    const isReveal = state.phase === 'answer-reveal';
     const isTie = state.phase === 'tiebreaker';
     const header = isTie
       ? `🔥 TIEBREAKER — ${q.categoryName}`
@@ -757,8 +912,28 @@
     document.getElementById('q-header').textContent = header;
     document.getElementById('q-text').textContent = q.question;
 
+    const answerEl = document.getElementById('q-answer-reveal');
+    if (isReveal && q.answer) {
+      answerEl.textContent = q.answer;
+      answerEl.style.display = 'block';
+    } else {
+      answerEl.style.display = 'none';
+    }
+
+    const isAllPlay = state.settings?.allPlayMode;
+    const isAllPlayReview = state.phase === 'all-play-review';
     const buzzEl = document.getElementById('buzz-display');
-    if (state.buzzedPlayerName) {
+    if (isReveal || isAllPlayReview) {
+      if (isAllPlayReview && q.answer) { answerEl.textContent = q.answer; answerEl.style.display = 'block'; }
+      buzzEl.style.display = 'block';
+      buzzEl.textContent = 'TIME\'S UP';
+    } else if (isAllPlay) {
+      const isTeam = state.settings?.teamMode && state.teams?.length;
+      const participants = isTeam ? state.teams : state.players;
+      const submitted = Object.keys(state.allPlayAnswers || {}).length;
+      buzzEl.style.display = 'block';
+      buzzEl.textContent = `${submitted} / ${participants.length} ANSWERED`;
+    } else if (state.buzzedPlayerName) {
       buzzEl.style.display = 'block';
       buzzEl.textContent = `${state.buzzedPlayerName.toUpperCase()} BUZZED IN!`;
       if (prevBuzzId !== state.buzzedPlayerId) playBuzz();
@@ -766,24 +941,59 @@
       buzzEl.style.display = 'none';
     }
     prevBuzzId = state.buzzedPlayerId;
+
+    // Steal flash — show briefly when steal opportunity opens, then fade
+    const stealEl = document.getElementById('steal-flash');
+    if (state.isStealOpportunity && state.buzzOpen && !state.buzzedPlayerId) {
+      if (stealEl.style.display === 'none') {
+        stealEl.style.display = 'block';
+        stealEl.style.animation = 'none';
+        void stealEl.offsetWidth;
+        stealEl.style.animation = '';
+      }
+    } else {
+      stealEl.style.display = 'none';
+    }
+
     syncTimer();
+  }
+
+  let confettiLaunched = false;
+
+  function launchConfetti() {
+    const container = document.getElementById('confetti-container');
+    container.innerHTML = '';
+    const colors = ['#ffd700','#ff6b6b','#5acc80','#00cfff','#ff8c00','#c084fc','#ff69b4','#7ef0ff'];
+    for (let i = 0; i < 80; i++) {
+      const el = document.createElement('div');
+      el.className = 'confetti-piece';
+      const size = 5 + Math.random() * 9;
+      el.style.cssText = `left:${Math.random()*100}%;width:${size}px;height:${size * 1.4}px;background:${colors[Math.floor(Math.random()*colors.length)]};animation-delay:${Math.random()*1.8}s;animation-duration:${2.4+Math.random()*2}s;opacity:${0.7+Math.random()*0.3}`;
+      container.appendChild(el);
+    }
+    setTimeout(() => { container.innerHTML = ''; confettiLaunched = false; }, 6000);
   }
 
   function renderGameOver() {
     show('gameover');
+    if (!confettiLaunched) { confettiLaunched = true; launchConfetti(); }
     const isTeam = state.settings?.teamMode && state.teams?.length;
     const sorted = isTeam
       ? [...state.teams].sort((a, b) => b.score - a.score)
       : [...state.players].sort((a, b) => b.score - a.score);
+    const winner = sorted[0];
+    const titleEl = document.getElementById('gameover-title');
+    titleEl.textContent = winner ? `🏆 ${winner.name.toUpperCase()} WINS!` : 'GAME OVER!';
     const total = sorted.length;
     document.getElementById('final-scores').innerHTML = sorted.map((item, i) => {
-      const delay = (total - 1 - i) * 350;
+      const delay = (total - 1 - i) * 380;
       const nameLine = isTeam
         ? `${esc(item.name)}<br><span style="font-size:.6em;opacity:.5">${state.players.filter(p => p.teamId === item.id).map(p => esc(p.name)).join(', ')}</span>`
         : esc(item.name);
+      const rankIcon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
       return `
         <div class="final-row ${i === 0 ? 'winner' : ''}" style="animation:score-reveal 0.45s ease ${delay}ms forwards">
-          <span class="final-rank">${i === 0 ? '🏆' : `#${i+1}`}</span>
+          <span class="final-rank">${rankIcon}</span>
           <span class="final-name">${nameLine}</span>
           <span class="final-amt">${fmt(item.score)}</span>
         </div>
@@ -808,6 +1018,7 @@
 
   function renderFinal() {
     show('final');
+    syncTimer();
     const fq = state.finalQuestion;
     document.getElementById('final-category').textContent = fq?.categoryName ?? 'FINAL JEOPARDY';
 

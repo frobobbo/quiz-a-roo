@@ -129,6 +129,8 @@
     /* Category card */
     .lib-cat { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
     .lib-cat.is-active { border-color: #3a3a80; }
+    .lib-cat.is-played { opacity: .6; }
+    .played-badge { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #888; background: #222; border: 1px solid #444; border-radius: 4px; padding: 2px 5px; flex-shrink: 0; white-space: nowrap; }
 
     .lib-cat-header { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: var(--dark); }
     .cat-num { font-family: Impact, sans-serif; font-size: 13px; color: var(--gold); opacity: .5; min-width: 18px; text-align: right; flex-shrink: 0; }
@@ -254,6 +256,32 @@
     /* ── GAME ACTION ROW ── */
     .action-row { display: flex; gap: 7px; flex-wrap: wrap; }
 
+    /* ── HOST PICK GRID ── */
+    #host-pick-section { display: none; }
+    .pick-for-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.45); margin-bottom: 6px; }
+    .pick-for-name { font-size: 16px; font-weight: 700; color: var(--gold); margin-bottom: 12px; }
+    .host-pick-grid { display: flex; flex-direction: column; gap: 4px; }
+    .host-pick-row { display: grid; gap: 4px; align-items: center; }
+    .host-pick-cat { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: rgba(255,255,255,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px; }
+    .host-pick-btn { background: var(--dark); border: 1px solid #446; border-radius: 5px; color: var(--gold); font-family: Impact, sans-serif; font-size: 13px; padding: 6px 4px; cursor: pointer; text-align: center; transition: background .1s, border-color .1s; }
+    .host-pick-btn:hover { background: #1a1a60; border-color: var(--gold); }
+    .host-pick-btn.used { background: #111; border-color: #222; color: #333; pointer-events: none; text-decoration: line-through; }
+    #cat-search { width: 100%; padding: 7px 10px; margin-bottom: 8px; background: #0a0a2e; border: 1px solid #446; border-radius: 6px; color: #fff; font-size: 13px; outline: none; }
+    #cat-search:focus { border-color: var(--gold); }
+
+    /* ── ALL PLAY REVIEW ── */
+    .apr-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.07); flex-wrap:wrap; }
+    .apr-pname { width:90px; font-size:12px; font-weight:700; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .apr-ans   { flex:1; font-size:12px; opacity:.75; font-style:italic; min-width:80px; }
+    .apr-btns  { display:flex; gap:4px; flex-shrink:0; }
+    .apr-j-btn { padding:5px 9px; border-radius:5px; border:1px solid #446; font-size:11px; font-weight:700; cursor:pointer; background:#0a0a2e; color:#fff; letter-spacing:.5px; }
+    .apr-j-btn.correct  { border-color:#5acc80; color:#5acc80; }
+    .apr-j-btn.correct.judged  { background:#5acc80; color:#000; }
+    .apr-j-btn.wrong    { border-color:#ff6b6b; color:#ff6b6b; }
+    .apr-j-btn.wrong.judged    { background:#ff6b6b; color:#000; }
+    .apr-j-btn.skip.judged     { background:#666; color:#fff; }
+    .apr-j-btn[disabled]       { opacity:.35; cursor:default; }
+
     /* ── SETTINGS LINK ── */
     #settings-link { background: transparent; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; color: rgba(255,255,255,.45); padding: 3px 9px; cursor: pointer; font-size: 15px; line-height: 1; text-decoration: none; display: inline-flex; align-items: center; }
     #settings-link:hover { border-color: var(--gold); color: var(--gold); }
@@ -266,6 +294,12 @@
     .gen-cats-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.4); margin-bottom: 2px; }
     #gen-cats-theme-input { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; color: var(--white); font-size: 14px; padding: 10px 13px; outline: none; width: 100%; }
     #gen-cats-theme-input:focus { border-color: var(--gold); }
+    .gen-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+    .gen-tab { background: transparent; border: none; border-bottom: 2px solid transparent; color: rgba(255,255,255,.4); font-size: 12px; font-weight: 700; letter-spacing: .5px; padding: 6px 14px; cursor: pointer; text-transform: uppercase; transition: color .15s, border-color .15s; margin-bottom: -1px; }
+    .gen-tab:hover { color: rgba(255,255,255,.7); }
+    .gen-tab.gen-tab-active { color: var(--gold); border-bottom-color: var(--gold); }
+    .gen-source-input { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; color: var(--white); font-size: 14px; padding: 10px 13px; outline: none; width: 100%; }
+    .gen-source-input:focus { border-color: var(--gold); }
     .gen-cats-count-row { display: flex; gap: 8px; }
     .gen-cats-count-btn { background: var(--dark); border: 1px solid var(--border); border-radius: 7px; color: rgba(255,255,255,.5); font-size: 15px; font-family: Impact, sans-serif; letter-spacing: 1px; padding: 8px 18px; cursor: pointer; transition: border-color .15s, color .15s; }
     .gen-cats-count-btn.active { border-color: var(--gold); color: var(--gold); }
@@ -417,6 +451,37 @@
     #clear-history-btn:hover { background: rgba(122,34,34,.25); }
     #history-close-btn { background: transparent; border: none; color: rgba(255,255,255,.35); font-size: 12px; cursor: pointer; padding: 6px 12px; }
     #history-close-btn:hover { color: rgba(255,255,255,.65); }
+
+    /* ── DUPLICATES MODAL ── */
+    #dupes-modal { display: none; position: fixed; inset: 0; z-index: 250; align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto; }
+    #dupes-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.72); }
+    #dupes-dialog { position: relative; background: var(--panel); border: 2px solid var(--gold); border-radius: 14px; padding: 22px 22px 18px; width: min(680px, 100%); display: flex; flex-direction: column; gap: 14px; }
+    #dupes-header { display: flex; align-items: center; gap: 10px; }
+    #dupes-title { font-family: Impact, sans-serif; font-size: 17px; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; margin: 0; flex: 1; }
+    #dupes-close { background: transparent; border: none; color: rgba(255,255,255,.35); font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; }
+    #dupes-close:hover { color: var(--white); }
+    .dupes-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+    .dupes-stat { background: var(--dark); border: 1px solid #446; border-radius: 8px; padding: 8px 14px; font-size: 12px; text-align: center; min-width: 80px; }
+    .dupes-stat .ds-num { font-family: Impact, sans-serif; font-size: 22px; color: var(--gold); display: block; }
+    .dupes-stat.warn .ds-num { color: #ff9933; }
+    .dupes-stat.clean .ds-num { color: #5acc80; }
+    .dupes-section-head { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,.45); border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 4px; }
+    .dupe-group { background: var(--dark); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+    .dupe-group-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; user-select: none; }
+    .dupe-group-head:hover { background: rgba(255,255,255,.03); }
+    .dupe-badge { background: #7a2222; color: #fff; border-radius: 10px; font-size: 10px; font-weight: 700; padding: 2px 7px; flex-shrink: 0; }
+    .dupe-key { font-size: 13px; color: var(--white); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dupe-chevron { font-size: 11px; color: rgba(255,255,255,.3); flex-shrink: 0; transition: transform .15s; }
+    .dupe-group.open .dupe-chevron { transform: rotate(90deg); }
+    .dupe-group-body { display: none; border-top: 1px solid var(--border); }
+    .dupe-group.open .dupe-group-body { display: block; }
+    .dupe-item { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; padding: 7px 12px; border-bottom: 1px solid #1a1a40; font-size: 12px; align-items: start; }
+    .dupe-item:last-child { border-bottom: none; }
+    .dupe-item .di-cat { color: var(--gold); font-weight: 700; grid-column: 1 / -1; font-size: 11px; letter-spacing: .5px; }
+    .dupe-item .di-label { color: rgba(255,255,255,.4); white-space: nowrap; }
+    .dupe-item .di-val { color: var(--white); }
+    .dupes-empty { color: rgba(255,255,255,.35); font-style: italic; font-size: 13px; padding: 6px 0; }
+    #dupes-loading { text-align: center; padding: 24px; color: rgba(255,255,255,.5); font-style: italic; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -432,6 +497,7 @@
   <button class="btn btn-gold" id="start-btn" style="font-size:15px;padding:10px 28px">START GAME</button>
   <button class="btn btn-gray" id="randomize-btn">🎲 Random Game Setup</button>
   <button class="btn btn-gray" id="preview-btn">👁 Preview Categories</button>
+  <button id="lobby-mode-btn" style="margin-left:auto;padding:5px 12px;border-radius:20px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">⚡ BUZZ MODE</button>
   <div id="randomize-summary" style="display:none;font-size:11px;color:rgba(255,255,255,.45);line-height:1.6"></div>
 </div>
 
@@ -463,9 +529,14 @@
 
     <!-- Game controls (in-game only) -->
     <div id="game-actions" style="display:none;padding:14px;border-top:1px solid var(--border);background:var(--panel)">
-      <div class="action-row">
+      <div class="action-row" style="align-items:center;flex-wrap:wrap;gap:6px">
         <button class="btn btn-gray" id="skip-btn" style="display:none">Skip Question</button>
+        <button class="btn btn-gold" id="continue-btn" style="display:none">Continue →</button>
+        <button class="btn btn-gray" id="pause-btn" style="display:none">⏸ Pause</button>
+        <button class="btn btn-gray" id="undo-btn" style="display:none;opacity:.5" title="Undo last score change">↩ Undo Score</button>
+        <button class="btn btn-gold" id="rematch-btn" style="display:none">🔄 Rematch</button>
         <button class="btn btn-gray" id="reset-btn">Reset Game</button>
+        <button id="mode-toggle-btn" style="margin-left:auto;padding:5px 12px;border-radius:20px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">⚡ BUZZ</button>
       </div>
     </div>
   </div>
@@ -518,8 +589,14 @@
       <div id="daily-double-section">
         <div class="phase-card">
           <h2>DAILY DOUBLE!</h2>
-          <p id="dd-player-name" style="font-size:18px;color:var(--white);margin-bottom:4px"></p>
-          <p>is placing their wager…</p>
+          <div id="dd-pick-player-area">
+            <p style="margin-bottom:10px;opacity:.7;font-size:13px">Select the player who will wager:</p>
+            <div id="dd-player-btns" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center"></div>
+          </div>
+          <div id="dd-wagering-area" style="display:none">
+            <p id="dd-player-name" style="font-size:18px;color:var(--white);margin-bottom:4px"></p>
+            <p style="opacity:.7">is placing their wager…</p>
+          </div>
         </div>
         <div class="q-box" style="margin-top:12px">
           <div class="q-meta" id="dd-q-meta"></div>
@@ -534,6 +611,24 @@
 
       <!-- Page tabs (selecting phase, multi-page games) -->
       <div id="game-page-tabs" style="display:none;margin-bottom:16px"></div>
+
+      <!-- Host pick override (selecting phase) -->
+      <div id="host-pick-section">
+        <div class="pick-for-label">Pick for player</div>
+        <div class="pick-for-name" id="pick-for-name"></div>
+        <input type="text" id="cat-search" placeholder="Search categories…" autocomplete="off">
+        <div class="host-pick-grid" id="host-pick-grid"></div>
+      </div>
+
+      <!-- All Play review phase -->
+      <div id="all-play-review-section" style="display:none">
+        <div class="section-title" style="margin-bottom:6px">All Play — Judge Answers</div>
+        <div style="font-size:13px;opacity:.6;margin-bottom:12px">
+          Correct answer: <span id="apr-host-correct" style="color:#5acc80;font-weight:700"></span>
+        </div>
+        <div id="apr-host-table"></div>
+        <button class="btn" id="finish-all-play-btn" style="margin-top:12px;width:100%;background:var(--gold);color:#000;font-weight:700">Continue →</button>
+      </div>
 
       <!-- Tiebreaker phase -->
       <div id="tiebreaker-section">
@@ -599,8 +694,10 @@
           <button class="btn btn-gray btn-sm" id="export-lib-btn">⬇ Export</button>
           <label class="btn btn-gray btn-sm" style="cursor:pointer" title="Import library JSON">⬆ Import<input type="file" id="import-lib-input" accept=".json" style="display:none"></label>
           <button class="btn btn-gray btn-sm" id="reset-lib-btn">Deselect All</button>
+          <button class="btn btn-gray btn-sm" id="reset-played-btn" title="Clear played flags so all categories are eligible for random selection">↺ Reset Played</button>
           <button class="btn btn-sm" id="delete-lib-btn" style="background:transparent;border:1px solid #882828;color:#cc4444">🗑 Delete All</button>
           <button class="btn btn-sm" id="gen-cats-btn" style="background:#1a1a60;border:1px solid #556;color:rgba(255,255,255,.7)">✨ Generate</button>
+          <button class="btn btn-sm" id="dupes-btn" style="background:#1a1a60;border:1px solid #556;color:rgba(255,255,255,.7)">🔍 Dupes</button>
           <button class="btn btn-gold btn-sm" id="add-cat-btn">+ Category</button>
           <div id="page-tabs-bar"></div>
         </div>
@@ -626,6 +723,19 @@
       </button>
     </div>
     <button id="add-cat-cancel">Cancel</button>
+  </div>
+</div>
+
+<div id="dupes-modal">
+  <div id="dupes-backdrop"></div>
+  <div id="dupes-dialog">
+    <div id="dupes-header">
+      <div id="dupes-title">Duplicate Scan</div>
+      <button id="dupes-close">×</button>
+    </div>
+    <div id="dupes-body">
+      <div id="dupes-loading">Scanning library…</div>
+    </div>
   </div>
 </div>
 
@@ -690,6 +800,7 @@
 <script>
   const socket = io();
   let gameState = null;
+  let prevPhase = null;
   let libState  = null;
   let activePage = null; // currently viewed page tab in library
   let activeLibrary = 'Default';
@@ -761,6 +872,7 @@
   // ── Generate Categories ────────────────────────────────────────────────────
 
   let genCatsCount = 3;
+  let genCatsTab = 'random'; // 'random' | 'source'
 
   function openGenCatsModal() {
     genCatsCount = 3;
@@ -772,48 +884,104 @@
     document.getElementById('gen-cats-modal').style.display = 'none';
   }
 
+  function genTabsHtml() {
+    return `<div class="gen-tabs">
+      <button class="gen-tab${genCatsTab === 'random' ? ' gen-tab-active' : ''}" data-tab="random">Random / Theme</button>
+      <button class="gen-tab${genCatsTab === 'source' ? ' gen-tab-active' : ''}" data-tab="source">From URL or Topic</button>
+    </div>`;
+  }
+
+  function wireGenTabs(dlg) {
+    dlg.querySelectorAll('.gen-tab').forEach(btn => {
+      btn.addEventListener('click', () => { genCatsTab = btn.dataset.tab; showGenCatsRequest(); });
+    });
+  }
+
   function showGenCatsRequest() {
     const dlg = document.getElementById('gen-cats-dialog');
-    dlg.innerHTML = `
-      <h2>✨ Generate Categories</h2>
-      <div>
-        <div class="gen-cats-label">Theme <span style="opacity:.5">(optional)</span></div>
-        <input id="gen-cats-theme-input" type="text" placeholder="e.g. 80s movies, science, world geography…" maxlength="100" autocomplete="off">
-      </div>
-      <div>
-        <div class="gen-cats-label">How many categories?</div>
-        <div class="gen-cats-count-row">
-          ${[2,3,4,5,6].map(n => `<button class="gen-cats-count-btn${n === genCatsCount ? ' active' : ''}" data-n="${n}">${n}</button>`).join('')}
+    if (genCatsTab === 'source') {
+      dlg.innerHTML = `
+        <h2>✨ Generate Categories</h2>
+        ${genTabsHtml()}
+        <div>
+          <div class="gen-cats-label">URL or Topic</div>
+          <input id="gen-source-input" class="gen-source-input" type="text" placeholder="https://en.wikipedia.org/wiki/… or just a topic like 'Roman history'" maxlength="500" autocomplete="off">
         </div>
-      </div>
-      <div class="gen-cats-footer">
-        <button id="gen-cats-cancel-btn">Cancel</button>
-        <button id="gen-cats-go-btn">✨ Generate</button>
-      </div>
-    `;
-    document.getElementById('gen-cats-theme-input').focus();
-    dlg.querySelectorAll('.gen-cats-count-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        genCatsCount = +btn.dataset.n;
-        dlg.querySelectorAll('.gen-cats-count-btn').forEach(b => b.classList.toggle('active', b === btn));
+        <div>
+          <div class="gen-cats-label">Category Name <span style="opacity:.5">(optional)</span></div>
+          <input id="gen-source-name" class="gen-source-input" type="text" placeholder="Leave blank to let AI decide" maxlength="60" autocomplete="off">
+        </div>
+        <div class="gen-cats-footer">
+          <button id="gen-cats-cancel-btn">Cancel</button>
+          <button id="gen-cats-go-btn">✨ Generate</button>
+        </div>
+      `;
+      wireGenTabs(dlg);
+      document.getElementById('gen-source-input').focus();
+      document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
+      document.getElementById('gen-cats-go-btn').addEventListener('click', () => {
+        const source = document.getElementById('gen-source-input').value.trim();
+        const catName = document.getElementById('gen-source-name').value.trim();
+        if (!source) return;
+        const isUrl = source.startsWith('http://') || source.startsWith('https://');
+        showGenSourceLoading(isUrl ? 'Fetching URL and generating…' : 'Generating category…');
+        socket.emit('generate-category-from-source', { source, sourceType: isUrl ? 'url' : 'topic', catName });
       });
-    });
-    document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
-    document.getElementById('gen-cats-go-btn').addEventListener('click', () => {
-      const theme = document.getElementById('gen-cats-theme-input').value.trim();
-      showGenCatsLoading();
-      socket.emit('generate-categories', { theme, count: genCatsCount });
-    });
-    document.getElementById('gen-cats-theme-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') document.getElementById('gen-cats-go-btn').click();
-      if (e.key === 'Escape') closeGenCatsModal();
-    });
+      document.getElementById('gen-source-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('gen-cats-go-btn').click();
+        if (e.key === 'Escape') closeGenCatsModal();
+      });
+    } else {
+      dlg.innerHTML = `
+        <h2>✨ Generate Categories</h2>
+        ${genTabsHtml()}
+        <div>
+          <div class="gen-cats-label">Theme <span style="opacity:.5">(optional)</span></div>
+          <input id="gen-cats-theme-input" type="text" placeholder="e.g. 80s movies, science, world geography…" maxlength="100" autocomplete="off">
+        </div>
+        <div>
+          <div class="gen-cats-label">How many categories?</div>
+          <div class="gen-cats-count-row">
+            ${[2,3,4,5,6].map(n => `<button class="gen-cats-count-btn${n === genCatsCount ? ' active' : ''}" data-n="${n}">${n}</button>`).join('')}
+          </div>
+        </div>
+        <div class="gen-cats-footer">
+          <button id="gen-cats-cancel-btn">Cancel</button>
+          <button id="gen-cats-go-btn">✨ Generate</button>
+        </div>
+      `;
+      wireGenTabs(dlg);
+      document.getElementById('gen-cats-theme-input').focus();
+      dlg.querySelectorAll('.gen-cats-count-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          genCatsCount = +btn.dataset.n;
+          dlg.querySelectorAll('.gen-cats-count-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+      document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
+      document.getElementById('gen-cats-go-btn').addEventListener('click', () => {
+        const theme = document.getElementById('gen-cats-theme-input').value.trim();
+        showGenCatsLoading();
+        socket.emit('generate-categories', { theme, count: genCatsCount });
+      });
+      document.getElementById('gen-cats-theme-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('gen-cats-go-btn').click();
+        if (e.key === 'Escape') closeGenCatsModal();
+      });
+    }
   }
 
   function showGenCatsLoading() {
     document.getElementById('gen-cats-dialog').innerHTML = `
       <h2>✨ Generate Categories</h2>
       <div class="gen-cats-loading">Generating ${genCatsCount} categories… this may take a moment.</div>
+    `;
+  }
+
+  function showGenSourceLoading(msg) {
+    document.getElementById('gen-cats-dialog').innerHTML = `
+      <h2>✨ Generate Categories</h2>
+      <div class="gen-cats-loading">${esc(msg)}</div>
     `;
   }
 
@@ -881,6 +1049,48 @@
 
   socket.on('gen-categories-error', ({ message }) => showGenCatsError(message));
 
+  socket.on('gen-source-result', ({ category }) => {
+    if (!category || !Array.isArray(category.questions)) {
+      showGenCatsError('Unexpected response. Try again.');
+      return;
+    }
+    showGenSourceResult(category);
+  });
+
+  socket.on('gen-source-error', ({ message }) => showGenCatsError(message));
+
+  function showGenSourceResult(cat) {
+    const dlg = document.getElementById('gen-cats-dialog');
+    dlg.innerHTML = `
+      <h2>Generated Category</h2>
+      <div class="gen-cat-result">
+        <div class="gen-cat-result-header">
+          <input type="checkbox" class="gen-cat-check" checked style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+          <input type="text" class="gen-cat-name-edit" id="gen-source-cat-name" value="${esc(cat.name)}">
+        </div>
+        <div class="gen-cat-qs">
+          ${(cat.questions || []).map(q => `
+            <div class="gen-cat-q-row">
+              <span class="gen-cat-q-val">$${q.value}</span>
+              <span class="gen-cat-q-text">${esc(q.question)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="gen-cats-footer">
+        <button id="gen-cats-back-btn" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:12px;cursor:pointer;padding:6px 12px">← Try Another</button>
+        <button id="gen-source-add-btn" class="btn-primary">Add to Library</button>
+      </div>
+    `;
+    dlg._sourceCategory = cat;
+    document.getElementById('gen-cats-back-btn').addEventListener('click', () => { genCatsTab = 'source'; showGenCatsRequest(); });
+    document.getElementById('gen-source-add-btn').addEventListener('click', () => {
+      const name = (document.getElementById('gen-source-cat-name').value || cat.name).trim();
+      socket.emit('add-generated-categories', { categories: [{ name, questions: cat.questions }] });
+      closeGenCatsModal();
+    });
+  }
+
   function showGenCatsError(msg) {
     const dlg = document.getElementById('gen-cats-dialog');
     dlg.innerHTML = `
@@ -943,6 +1153,7 @@
   }
 
   socket.on('host-state', s => {
+    prevPhase = gameState?.phase ?? null;
     gameState = s;
     if (s.theme === 'custom' && s.customThemeVars) applyCustomTheme(s.customThemeVars, false);
     else if (s.theme) applyTheme(s.theme, false);
@@ -1006,18 +1217,55 @@
     const inGame = phase !== 'lobby';
 
     document.getElementById('phase-badge').textContent = phase.replace(/-/g, ' ').toUpperCase();
-    document.getElementById('lobby-bar').style.display       = inGame ? 'none' : 'flex';
+    const modeBtn = document.getElementById('mode-toggle-btn');
+    if (gameState.settings?.allPlayMode) {
+      modeBtn.textContent = '✏ ALL PLAY';
+      modeBtn.style.borderColor = '#5acc80';
+      modeBtn.style.color = '#5acc80';
+    } else {
+      modeBtn.textContent = '⚡ BUZZ';
+      modeBtn.style.borderColor = 'var(--gold)';
+      modeBtn.style.color = 'var(--gold)';
+    }
+    document.getElementById('lobby-bar').style.display = inGame ? 'none' : 'flex';
+    const lobbyModeBtn = document.getElementById('lobby-mode-btn');
+    if (gameState.settings?.allPlayMode) {
+      lobbyModeBtn.textContent = '✏ ALL PLAY';
+      lobbyModeBtn.style.borderColor = '#5acc80';
+      lobbyModeBtn.style.color = '#5acc80';
+    } else {
+      lobbyModeBtn.textContent = '⚡ BUZZ MODE';
+      lobbyModeBtn.style.borderColor = 'var(--gold)';
+      lobbyModeBtn.style.color = 'var(--gold)';
+    }
     if (inGame) document.getElementById('randomize-summary').style.display = 'none';
     document.getElementById('game-actions').style.display    = inGame ? 'block' : 'none';
     document.getElementById('url-section').style.display     = inGame ? 'none' : 'block';
     document.getElementById('library-section').style.display = inGame ? 'none' : 'block';
-    document.getElementById('skip-btn').style.display        = phase === 'question' ? 'inline-flex' : 'none';
+    document.getElementById('skip-btn').style.display        = phase === 'question'       ? 'inline-flex' : 'none';
+    document.getElementById('continue-btn').style.display    = phase === 'answer-reveal'  ? 'inline-flex' : 'none';
+    const inQuestion = phase === 'question' || phase === 'tiebreaker';
+    const pauseBtn = document.getElementById('pause-btn');
+    pauseBtn.style.display = inQuestion ? 'inline-flex' : 'none';
+    pauseBtn.textContent   = gameState.paused ? '▶ Resume' : '⏸ Pause';
+    pauseBtn.style.background = gameState.paused ? '#1a5c1a' : '';
+    const undoBtn = document.getElementById('undo-btn');
+    undoBtn.style.display  = inGame ? 'inline-flex' : 'none';
+    undoBtn.style.opacity  = (gameState.scoreHistoryLength ?? 0) > 0 ? '1' : '0.35';
+    undoBtn.disabled       = (gameState.scoreHistoryLength ?? 0) === 0;
+    document.getElementById('rematch-btn').style.display = phase === 'game-over' ? 'inline-flex' : 'none';
 
     document.getElementById('round-over-section').style.display      = phase === 'round-over'      ? 'block' : 'none';
     document.getElementById('final-wager-section').style.display     = phase === 'final-wager'     ? 'block' : 'none';
     document.getElementById('final-question-section').style.display  = phase === 'final-question'  ? 'block' : 'none';
     document.getElementById('daily-double-section').style.display    = phase === 'daily-double'    ? 'block' : 'none';
     document.getElementById('tiebreaker-section').style.display      = phase === 'tiebreaker'      ? 'block' : 'none';
+    document.getElementById('host-pick-section').style.display       = phase === 'selecting'        ? 'block' : 'none';
+    document.getElementById('all-play-review-section').style.display = phase === 'all-play-review'  ? 'block' : 'none';
+    if (phase === 'selecting') {
+      if (prevPhase !== 'selecting') document.getElementById('cat-search').value = '';
+      renderHostPickGrid();
+    }
 
     // Page tabs — only show during selecting when multiple pages exist
     const gamePageTabsEl = document.getElementById('game-page-tabs');
@@ -1044,7 +1292,7 @@
 
     renderPlayers();
 
-    if (phase === 'question') {
+    if (phase === 'question' || phase === 'answer-reveal' || phase === 'all-play-review') {
       renderCurrentQuestion();
     } else {
       document.getElementById('current-q-section').style.display = 'none';
@@ -1052,11 +1300,12 @@
       hSyncTimer();
     }
 
-    if (phase === 'round-over')     renderRoundOver();
-    if (phase === 'final-wager')    renderFinalWager();
-    if (phase === 'final-question') renderFinalQuestion();
-    if (phase === 'daily-double')   renderDailyDouble();
-    if (phase === 'tiebreaker')     renderTiebreaker();
+    if (phase === 'round-over')      renderRoundOver();
+    if (phase === 'final-wager')     renderFinalWager();
+    if (phase === 'final-question')  renderFinalQuestion();
+    if (phase === 'daily-double')    renderDailyDouble();
+    if (phase === 'tiebreaker')      renderTiebreaker();
+    if (phase === 'all-play-review') renderAllPlayReview();
     if (!inGame && libState) renderLibrary();
   }
 
@@ -1092,12 +1341,77 @@
     }).join('');
   }
 
+  function renderHostPickGrid() {
+    const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
+    const cur = isTeam
+      ? gameState.teams[gameState.currentPlayerIndex]
+      : gameState.players[gameState.currentPlayerIndex];
+    document.getElementById('pick-for-name').textContent = cur?.name ?? '—';
+
+    const currentPage = gameState.currentPage || 1;
+    const query = (document.getElementById('cat-search').value || '').toLowerCase().trim();
+    const allCats = gameState.categories.filter(c => (c.page || 1) === currentPage);
+    const cats = query ? allCats.filter(c => c.name.toLowerCase().includes(query)) : allCats;
+    const maxCols = Math.max(...allCats.map(c => c.questions.length), 1);
+
+    const grid = document.getElementById('host-pick-grid');
+    grid.innerHTML = cats.map(cat => {
+      const globalCi = gameState.categories.indexOf(cat);
+      const cells = cat.questions.map((q, qi) =>
+        `<button class="host-pick-btn${q.used ? ' used' : ''}"
+           data-ci="${globalCi}" data-qi="${qi}">$${q.value}</button>`
+      ).join('');
+      return `<div class="host-pick-row" style="grid-template-columns:120px repeat(${maxCols},1fr)">
+        <span class="host-pick-cat" title="${esc(cat.name)}">${esc(cat.name)}</span>
+        ${cells}
+      </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.host-pick-btn:not(.used)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        socket.emit('host-select-question', {
+          categoryIndex: +btn.dataset.ci,
+          questionIndex: +btn.dataset.qi,
+        });
+      });
+    });
+  }
+
+  document.getElementById('cat-search').addEventListener('input', () => {
+    if (gameState?.phase === 'selecting') renderHostPickGrid();
+  });
+
   function renderDailyDouble() {
     const q = gameState.currentQuestion;
-    const p = gameState.settings?.teamMode
-      ? gameState.teams?.[gameState.currentPlayerIndex]
-      : gameState.players[gameState.currentPlayerIndex];
-    document.getElementById('dd-player-name').textContent = p?.name ?? '';
+    const ddPlayerId = gameState.dailyDoublePlayerId;
+    const pickArea   = document.getElementById('dd-pick-player-area');
+    const wagerArea  = document.getElementById('dd-wagering-area');
+
+    if (!ddPlayerId) {
+      pickArea.style.display  = 'block';
+      wagerArea.style.display = 'none';
+      const btns = document.getElementById('dd-player-btns');
+      const players = gameState.settings?.teamMode && gameState.teams?.length
+        ? gameState.teams
+        : gameState.players;
+      btns.innerHTML = players.map(p => `
+        <button class="dd-pick-btn" data-id="${p.id}"
+          style="padding:8px 18px;border-radius:20px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px">
+          ${esc(p.name)}
+        </button>
+      `).join('');
+      btns.querySelectorAll('.dd-pick-btn').forEach(btn => {
+        btn.addEventListener('click', () => socket.emit('host-pick-dd-player', { playerId: btn.dataset.id }));
+      });
+    } else {
+      pickArea.style.display  = 'none';
+      wagerArea.style.display = 'block';
+      const ddPlayer = gameState.settings?.teamMode && gameState.teams?.length
+        ? gameState.teams.find(t => t.id === ddPlayerId) ?? gameState.players.find(p => p.id === ddPlayerId)
+        : gameState.players.find(p => p.id === ddPlayerId);
+      document.getElementById('dd-player-name').textContent = ddPlayer?.name ?? '';
+    }
+
     document.getElementById('dd-q-meta').textContent = `${q?.categoryName} — $${q?.value}`;
     document.getElementById('dd-q-text').textContent = q?.question ?? '';
     document.getElementById('dd-q-answer').textContent = gameState.currentQuestion?.answer ?? '';
@@ -1111,6 +1425,37 @@
     document.getElementById('tiebreaker-players-label').textContent =
       tied.length ? tied.join(' vs ') + ' — first correct answer wins!' : '';
   }
+
+  function renderAllPlayReview() {
+    const q = gameState.currentQuestion;
+    document.getElementById('apr-host-correct').textContent = q?.answer ?? '';
+    const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
+    const participants = isTeam ? gameState.teams : gameState.players;
+    const answers = gameState.allPlayAnswers || {};
+    const val = q?.value || 0;
+
+    document.getElementById('apr-host-table').innerHTML = participants.map(p => {
+      const entry = answers[p.id];
+      const ansText = !entry ? '—' : entry.skipped ? '(Skipped)' : (entry.answer || '(empty)');
+      const judged = entry?.result;
+      const dis = judged ? 'disabled' : '';
+      return `<div class="apr-row">
+        <div class="apr-pname" title="${esc(p.name)}">${esc(p.name)}</div>
+        <div class="apr-ans">${esc(ansText)}</div>
+        <div class="apr-btns">
+          <button class="apr-j-btn correct${judged === 'correct' ? ' judged' : ''}" data-id="${p.id}" data-result="correct" ${dis}>✓ +$${val}</button>
+          <button class="apr-j-btn wrong${judged === 'incorrect' ? ' judged' : ''}" data-id="${p.id}" data-result="incorrect" ${dis}>✗ -$${val}</button>
+          <button class="apr-j-btn skip${judged === 'skip' ? ' judged' : ''}" data-id="${p.id}" data-result="skip" ${dis}>Skip</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('apr-host-table').querySelectorAll('.apr-j-btn:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', () => socket.emit('judge-all-play', { id: btn.dataset.id, result: btn.dataset.result }));
+    });
+  }
+
+  document.getElementById('finish-all-play-btn').addEventListener('click', () => socket.emit('finish-all-play'));
 
   let fjAnswerRevealed = false;
 
@@ -1231,9 +1576,18 @@
         list.innerHTML = '<div style="opacity:.4;font-style:italic;font-size:13px">No players yet…</div>';
         return;
       }
-      list.innerHTML = gameState.players.map(p => `
-        <div class="player-row ${p.isCurrentTurn ? 'current' : ''}">
-          <span class="player-name">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}${p.isCurrentTurn ? ' ★' : ''}</span>
+      list.innerHTML = gameState.players.map(p => {
+        const ap = gameState.activePowerUps?.[p.id] || {};
+        const pp = gameState.playerPowerUps?.[p.id] || {};
+        const puBadges = [
+          ap.doubleDown ? '<span style="background:#c09a38;color:#000;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:3px">2×</span>' : '',
+          ap.shield     ? '<span style="background:#4488ff;color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;margin-left:3px">🛡</span>' : '',
+        ].join('');
+        const puCounts = gameState.settings?.powerUpsEnabled && (pp.doubleDown > 0 || pp.shield > 0)
+          ? `<span style="font-size:10px;opacity:.5;margin-left:4px">${pp.doubleDown > 0 ? `2×${pp.doubleDown}` : ''}${pp.doubleDown > 0 && pp.shield > 0 ? ' ' : ''}${pp.shield > 0 ? `🛡${pp.shield}` : ''}</span>`
+          : '';
+        return `<div class="player-row ${p.isCurrentTurn ? 'current' : ''}">
+          <span class="player-name">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}${p.isCurrentTurn ? ' ★' : ''}${puBadges}${puCounts}</span>
           <span class="player-score" onclick="editScore(this,'${p.id}',null)" title="Click to edit score">${fmt(p.score)}</span>
           ${inGame ? `
             <div class="score-adj">
@@ -1241,8 +1595,8 @@
               <button class="btn btn-gray btn-sm" onclick="adjustScore('${p.id}',${adjVal})">+</button>
             </div>` : `
             <button class="btn-icon danger" onclick="removePlayer('${p.id}')">✕</button>`}
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     }
   }
 
@@ -1258,14 +1612,21 @@
     document.getElementById('cq-text').textContent = q.question;
     document.getElementById('cq-answer').textContent = q.answer;
 
+    const isReveal = gameState.phase === 'answer-reveal';
     const qId = `${q.categoryName}|${q.value}`;
     if (qId !== lastQuestionId) {
       lastQuestionId = qId;
       document.getElementById('cq-answer').classList.add('masked');
       document.getElementById('reveal-btn').textContent = '👁 Reveal answer';
     }
+    if (isReveal) {
+      document.getElementById('cq-answer').classList.remove('masked');
+      document.getElementById('reveal-btn').style.display = 'none';
+    } else {
+      document.getElementById('reveal-btn').style.display = '';
+    }
 
-    if (gameState.buzzedPlayerId && gameState.buzzedPlayerName) {
+    if (!isReveal && gameState.buzzedPlayerId && gameState.buzzedPlayerName) {
       document.getElementById('judge-section').style.display = 'block';
       document.getElementById('judge-player-name').textContent = gameState.buzzedPlayerName;
     } else {
@@ -1380,7 +1741,7 @@
     const isOpen  = openCats.has(cat.id);
 
     const card = document.createElement('div');
-    card.className = `lib-cat${isActive ? ' is-active' : ''}`;
+    card.className = `lib-cat${isActive ? ' is-active' : ''}${cat.played ? ' is-played' : ''}`;
     card.dataset.id = cat.id;
 
     const catRound = cat.round || 1;
@@ -1399,6 +1760,7 @@
         <input class="lib-cat-name" type="text" value="${esc(cat.name)}"
                data-id="${cat.id}" placeholder="Category name…" spellcheck="false">
         <span class="lib-q-badge ${readyQs > 0 ? 'has-ready' : ''}">${readyQs}/${totalQs} ready</span>
+        ${cat.played ? '<span class="played-badge">✓ played</span>' : ''}
         <div class="round-pills">
           <button class="round-pill${catRound === 1 ? ' active-r1' : ''}" data-id="${cat.id}" data-round="1" title="Round 1">R1</button>
           <button class="round-pill${catRound === 2 ? ' active-r2' : ''}" data-id="${cat.id}" data-round="2" title="Round 2">R2</button>
@@ -1642,6 +2004,14 @@
   document.getElementById('correct-btn').addEventListener('click', () => socket.emit('judge-answer', { correct: true }));
   document.getElementById('wrong-btn').addEventListener('click', () => socket.emit('judge-answer', { correct: false }));
   document.getElementById('skip-btn').addEventListener('click', () => socket.emit('skip-question'));
+  document.getElementById('continue-btn').addEventListener('click', () => socket.emit('dismiss-answer-reveal'));
+  document.getElementById('pause-btn').addEventListener('click', () => socket.emit('toggle-pause'));
+  document.getElementById('undo-btn').addEventListener('click', () => socket.emit('undo-last-score'));
+  document.getElementById('rematch-btn').addEventListener('click', () => {
+    if (confirm('Start a rematch with the same players? Scores reset to 0.')) socket.emit('rematch');
+  });
+  document.getElementById('mode-toggle-btn').addEventListener('click', () => socket.emit('toggle-game-mode'));
+  document.getElementById('lobby-mode-btn').addEventListener('click', () => socket.emit('toggle-game-mode'));
   document.getElementById('reset-btn').addEventListener('click', () => {
     if (confirm('Reset the game? All scores will be cleared (library is kept).')) socket.emit('reset-game');
   });
@@ -1721,6 +2091,10 @@
     socket.emit('deactivate-all-categories');
   });
 
+  document.getElementById('reset-played-btn').addEventListener('click', () => {
+    socket.emit('reset-played-categories');
+  });
+
   document.getElementById('delete-lib-btn').addEventListener('click', () => {
     if (confirm('Delete all custom categories and reset to defaults? This cannot be undone.')) {
       socket.emit('reset-library');
@@ -1745,6 +2119,79 @@
     a.click();
     URL.revokeObjectURL(a.href);
   });
+
+  // ── Duplicate scanner ─────────────────────────────────────────────────────
+
+  const dupesModal    = document.getElementById('dupes-modal');
+  const dupesBody     = document.getElementById('dupes-body');
+
+  function openDupesModal() {
+    dupesModal.style.display = 'flex';
+    dupesBody.innerHTML = '<div id="dupes-loading">Scanning library…</div>';
+    fetch('/api/duplicates')
+      .then(r => r.json())
+      .then(renderDupes)
+      .catch(() => { dupesBody.innerHTML = '<div id="dupes-loading">Failed to load results.</div>'; });
+  }
+
+  function renderDupes(data) {
+    const { stats, duplicateCategories: dc, duplicateQuestions: dq, duplicateAnswers: da } = data;
+    const totalIssues = stats.dupeCatGroups + stats.dupeQGroups + stats.dupeAGroups;
+
+    function statChip(num, label, cls) {
+      return `<div class="dupes-stat ${cls}"><span class="ds-num">${num}</span>${label}</div>`;
+    }
+
+    function buildGroups(groups, type) {
+      if (!groups.length) return '<div class="dupes-empty">None found</div>';
+      return groups.map((g, gi) => {
+        const items = (type === 'category')
+          ? g.map(c => `<div class="dupe-item">
+              <span class="di-cat">${esc(c.name)}</span>
+              <span class="di-label">Questions:</span><span class="di-val">${c.questionCount}</span>
+            </div>`).join('')
+          : g.map(q => `<div class="dupe-item">
+              <span class="di-cat">${esc(q.categoryName)}</span>
+              <span class="di-label">Q:</span><span class="di-val">${esc(q.question)}</span>
+              <span class="di-label">A:</span><span class="di-val">${esc(q.answer)}</span>
+              <span class="di-label">Value:</span><span class="di-val">$${q.value}</span>
+            </div>`).join('');
+
+        const key = type === 'category' ? g[0].name
+          : type === 'question' ? g[0].question
+          : g[0].answer;
+        return `<div class="dupe-group" id="dg-${type}-${gi}">
+          <div class="dupe-group-head" onclick="this.parentElement.classList.toggle('open')">
+            <span class="dupe-badge">${g.length}×</span>
+            <span class="dupe-key">${esc(key)}</span>
+            <span class="dupe-chevron">▶</span>
+          </div>
+          <div class="dupe-group-body">${items}</div>
+        </div>`;
+      }).join('');
+    }
+
+    dupesBody.innerHTML = `
+      <div class="dupes-summary">
+        ${statChip(stats.totalCategories, 'categories', '')}
+        ${statChip(stats.totalQuestions,  'questions',  '')}
+        ${statChip(stats.dupeCatGroups,   'dupe cat names',  stats.dupeCatGroups  ? 'warn' : 'clean')}
+        ${statChip(stats.dupeQGroups,     'dupe questions',  stats.dupeQGroups    ? 'warn' : 'clean')}
+        ${statChip(stats.dupeAGroups,     'dupe answers',    stats.dupeAGroups    ? 'warn' : 'clean')}
+      </div>
+      ${totalIssues === 0 ? `<div class="dupes-empty" style="text-align:center;padding:18px 0">✅ No duplicates found in <strong>${esc(data.library)}</strong></div>` : ''}
+      <div class="dupes-section-head">Duplicate Category Names (${stats.dupeCatGroups})</div>
+      ${buildGroups(dc, 'category')}
+      <div class="dupes-section-head">Duplicate Question Text (${stats.dupeQGroups})</div>
+      ${buildGroups(dq, 'question')}
+      <div class="dupes-section-head">Duplicate Answers (${stats.dupeAGroups})</div>
+      ${buildGroups(da, 'answer')}
+    `;
+  }
+
+  document.getElementById('dupes-btn').addEventListener('click', openDupesModal);
+  document.getElementById('dupes-close').addEventListener('click', () => { dupesModal.style.display = 'none'; });
+  document.getElementById('dupes-backdrop').addEventListener('click', () => { dupesModal.style.display = 'none'; });
 
   // Import library
   document.getElementById('import-lib-input').addEventListener('change', function() {

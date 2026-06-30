@@ -78,6 +78,21 @@
     .tog input:checked + .tog-track::before { transform: translateX(18px); }
     .settings-save-row { display: flex; align-items: center; gap: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
 
+    /* Mode picker */
+    .mode-picker { display: flex; gap: 10px; }
+    .mode-opt { flex: 1; cursor: pointer; }
+    .mode-opt input[type="radio"] { display: none; }
+    .mode-opt-inner {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      padding: 14px 10px; border: 2px solid rgba(255,255,255,.12);
+      border-radius: 10px; text-align: center; transition: border-color .2s, background .2s;
+    }
+    .mode-opt input:checked + .mode-opt-inner { border-color: var(--gold); background: rgba(192,154,56,.1); }
+    .mode-opt-inner:hover { border-color: rgba(192,154,56,.5); }
+    .mode-opt-icon { font-size: 22px; line-height: 1; }
+    .mode-opt-title { font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+    .mode-opt-desc  { font-size: 10px; opacity: .5; line-height: 1.3; }
+
     /* Voice select */
     .voice-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     .voice-option { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--dark); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border-color .15s; }
@@ -220,16 +235,47 @@
       <h2>Game Defaults</h2>
     </div>
     <div class="card-body">
+
+      <!-- Game Mode selector -->
+      <div>
+        <div class="setting-label" style="margin-bottom:10px">Game Mode</div>
+        <div class="mode-picker">
+          <label class="mode-opt">
+            <input type="radio" name="game-mode" id="mode-buzz" value="buzz" checked>
+            <div class="mode-opt-inner">
+              <div class="mode-opt-icon">⚡</div>
+              <div class="mode-opt-title">Buzz Mode</div>
+              <div class="mode-opt-desc">Players race to buzz in and answer out loud</div>
+            </div>
+          </label>
+          <label class="mode-opt">
+            <input type="radio" name="game-mode" id="mode-allplay" value="allplay">
+            <div class="mode-opt-inner">
+              <div class="mode-opt-icon">✏️</div>
+              <div class="mode-opt-title">All Play</div>
+              <div class="mode-opt-desc">Everyone types an answer simultaneously</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Timers -->
       <div class="settings-grid">
-        <div class="setting-row">
-          <span class="setting-label">Buzz window <span class="setting-val" id="buzz-val">30s</span></span>
+        <div class="setting-row" id="buzz-window-row">
+          <span class="setting-label" id="buzz-window-label">Buzz window <span class="setting-val" id="buzz-val">30s</span></span>
           <input type="range" id="buzz-range" min="10" max="60" step="5" value="30">
         </div>
-        <div class="setting-row">
+        <div class="setting-row" id="answer-time-row">
           <span class="setting-label">Answer time <span class="setting-val" id="answer-val">10s</span></span>
           <input type="range" id="answer-range" min="5" max="30" step="5" value="10">
         </div>
+        <div class="setting-row">
+          <span class="setting-label">Final wager time <span class="setting-val" id="wager-val">30s</span></span>
+          <input type="range" id="wager-range" min="10" max="60" step="5" value="30">
+        </div>
       </div>
+
+      <!-- Other toggles -->
       <div class="tog-list">
         <div class="tog-row">
           <label class="tog" title="Wrong answer locks player out for the current question">
@@ -253,9 +299,49 @@
           <span class="setting-label">Team Mode</span>
         </div>
       </div>
+
       <div class="settings-save-row">
         <button class="btn-save" id="game-defaults-save">Save Defaults</button>
         <div class="save-feedback" id="game-defaults-feedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Power-ups -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Power-ups</h2>
+    </div>
+    <div class="card-body">
+      <div class="tog-list">
+        <div class="tog-row">
+          <label class="tog" title="Give players special abilities they can use once per game">
+            <input type="checkbox" id="powerups-toggle">
+            <span class="tog-track"></span>
+          </label>
+          <span class="setting-label">Enable Power-ups</span>
+        </div>
+      </div>
+      <div id="powerups-config" style="margin-top:12px;display:none">
+        <div style="font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px">Charges per player at game start</div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <span class="setting-label">2× Double Down <span class="setting-val" id="dd-pu-val">1</span></span>
+            <input type="range" id="dd-pu-range" min="0" max="5" step="1" value="1">
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">🛡 Shield <span class="setting-val" id="shield-pu-val">1</span></span>
+            <input type="range" id="shield-pu-range" min="0" max="5" step="1" value="1">
+          </div>
+        </div>
+        <div style="font-size:11px;color:rgba(255,255,255,.35);margin-top:8px;line-height:1.6">
+          <strong style="color:rgba(255,255,255,.5)">2× Double Down</strong> — Player's next correct answer earns double points.<br>
+          <strong style="color:rgba(255,255,255,.5)">🛡 Shield</strong> — Player's next wrong answer has no score penalty.
+        </div>
+      </div>
+      <div class="settings-save-row">
+        <button class="btn-save" id="powerups-save">Save</button>
+        <div class="save-feedback" id="powerups-feedback"></div>
       </div>
     </div>
   </div>
@@ -526,9 +612,11 @@
     const gameDefaults = {
       buzzTime:            +document.getElementById('buzz-range').value,
       answerTime:          +document.getElementById('answer-range').value,
+      wagerTime:           +document.getElementById('wager-range').value,
       lockoutEnabled:      document.getElementById('lockout-toggle').checked,
       dailyDoublesEnabled: document.getElementById('dd-toggle').checked,
       teamMode:            document.getElementById('team-mode-toggle').checked,
+      allPlayMode:         document.getElementById('mode-allplay').checked,
     };
     // Also update current session if still in lobby
     socket.emit('update-settings', gameDefaults);
@@ -539,6 +627,33 @@
     showFeedback('game-defaults-feedback', res.ok ? 'Defaults saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
   });
 
+  // Power-ups toggle / config
+  document.getElementById('powerups-toggle').addEventListener('change', function() {
+    document.getElementById('powerups-config').style.display = this.checked ? 'block' : 'none';
+  });
+  document.getElementById('dd-pu-range').addEventListener('input', function() {
+    document.getElementById('dd-pu-val').textContent = this.value;
+  });
+  document.getElementById('shield-pu-range').addEventListener('input', function() {
+    document.getElementById('shield-pu-val').textContent = this.value;
+  });
+  document.getElementById('powerups-save').addEventListener('click', async () => {
+    const enabled = document.getElementById('powerups-toggle').checked;
+    const gameDefaults = {
+      powerUpsEnabled: enabled,
+      powerUpCounts: {
+        doubleDown: +document.getElementById('dd-pu-range').value,
+        shield:     +document.getElementById('shield-pu-range').value,
+      },
+    };
+    socket.emit('update-settings', gameDefaults);
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameDefaults }),
+    });
+    showFeedback('powerups-feedback', res.ok ? 'Saved.' : 'Save failed.', res.ok ? 'ok' : 'err');
+  });
+
   // Slider labels
   document.getElementById('buzz-range').addEventListener('input', function() {
     document.getElementById('buzz-val').textContent = this.value + 's';
@@ -546,6 +661,18 @@
   document.getElementById('answer-range').addEventListener('input', function() {
     document.getElementById('answer-val').textContent = this.value + 's';
   });
+  document.getElementById('wager-range').addEventListener('input', function() {
+    document.getElementById('wager-val').textContent = this.value + 's';
+  });
+
+  function updateModeLabels() {
+    const isAllPlay = document.getElementById('mode-allplay').checked;
+    document.getElementById('buzz-window-label').innerHTML =
+      (isAllPlay ? 'Typing time ' : 'Buzz window ') +
+      '<span class="setting-val" id="buzz-val">' + document.getElementById('buzz-range').value + 's</span>';
+    document.getElementById('answer-time-row').style.display = isAllPlay ? 'none' : 'flex';
+  }
+  document.querySelectorAll('input[name="game-mode"]').forEach(r => r.addEventListener('change', updateModeLabels));
 
   function showFeedback(id, msg, type) {
     const el = document.getElementById(id);
@@ -572,11 +699,25 @@
 
     // Game defaults
     const d = s.gameDefaults || {};
-    if (d.buzzTime)   { document.getElementById('buzz-range').value = d.buzzTime; document.getElementById('buzz-val').textContent = d.buzzTime + 's'; }
+    if (d.buzzTime)   { document.getElementById('buzz-range').value = d.buzzTime; }
     if (d.answerTime) { document.getElementById('answer-range').value = d.answerTime; document.getElementById('answer-val').textContent = d.answerTime + 's'; }
+    if (d.wagerTime)  { document.getElementById('wager-range').value = d.wagerTime; document.getElementById('wager-val').textContent = d.wagerTime + 's'; }
     document.getElementById('lockout-toggle').checked  = !!d.lockoutEnabled;
     document.getElementById('dd-toggle').checked       = d.dailyDoublesEnabled !== false;
     document.getElementById('team-mode-toggle').checked = !!d.teamMode;
+    document.getElementById(d.allPlayMode ? 'mode-allplay' : 'mode-buzz').checked = true;
+    updateModeLabels();
+
+    // Power-ups
+    document.getElementById('powerups-toggle').checked = !!d.powerUpsEnabled;
+    document.getElementById('powerups-config').style.display = d.powerUpsEnabled ? 'block' : 'none';
+    const puCounts = d.powerUpCounts || {};
+    const ddCount = puCounts.doubleDown ?? 1;
+    const shCount = puCounts.shield ?? 1;
+    document.getElementById('dd-pu-range').value = ddCount;
+    document.getElementById('dd-pu-val').textContent = ddCount;
+    document.getElementById('shield-pu-range').value = shCount;
+    document.getElementById('shield-pu-val').textContent = shCount;
 
     // Voice narration
     const tts = s.tts || {};

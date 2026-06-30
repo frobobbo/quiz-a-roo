@@ -30,7 +30,8 @@
         }
       ],
       "id": 0,
-      "round": 1
+      "round": 1,
+      "page": 1
     },
     {
       "name": "World History",
@@ -8109,8 +8110,384 @@
           "enabled": true
         }
       ]
+    },
+    {
+      "id": 220,
+      "round": 1,
+      "name": "ANIMAL GROUPS",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This group of lions shares the name of a feeling of self-respect",
+          "answer": "What is a pride?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "A group of wolves goes by this 4-letter word also used for a deck of cards",
+          "answer": "What is a pack?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "A group of these black birds is fittingly called a 'murder'",
+          "answer": "What are crows?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "A group of these prickly mammals is called a 'prickle'",
+          "answer": "What are porcupines?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "A group of these spotted big cats is poetically known as a 'leap'",
+          "answer": "What are leopards?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 221,
+      "round": 1,
+      "name": "AQUATIC LIFE",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This largest animal on Earth is a whale named for its color",
+          "answer": "What is the blue whale?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "Clownfish like Nemo make their home among the tentacles of this stinging creature",
+          "answer": "What is a sea anemone?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This eight-armed mollusk can change color and squirt ink to escape predators",
+          "answer": "What is an octopus?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "This jawless, eel-like fish secretes copious slime as a defense mechanism",
+          "answer": "What is a hagfish?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "This 'living fossil' fish was thought extinct for 65 million years until caught in 1938",
+          "answer": "What is the coelacanth?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 222,
+      "round": 1,
+      "name": "ANIMAL RECORD HOLDERS",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This tall African mammal is the world's tallest land animal",
+          "answer": "What is the giraffe?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "This big cat is the fastest land animal, reaching about 70 mph",
+          "answer": "What is the cheetah?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This bird, a type of falcon, is the fastest animal in a dive, exceeding 200 mph",
+          "answer": "What is the peregrine falcon?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "This slow-moving creature shares its name with a deadly sin and hangs in trees",
+          "answer": "What is the sloth?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "This tiny tardigrade nickname compares it to a chubby farm animal with a snout",
+          "answer": "What is a water bear (or moss piglet)?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 223,
+      "round": 1,
+      "name": "CREATURES IN IDIOMS",
+      "questions": [
+        {
+          "value": 200,
+          "question": "To 'let the cat out of' this is to reveal a secret",
+          "answer": "What is the bag?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "Killing two of these birds with one stone means accomplishing two tasks at once",
+          "answer": "What are birds?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "A red one of these is a misleading clue or distraction",
+          "answer": "What is a herring?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "This 'in the room' is an obvious problem everyone avoids discussing",
+          "answer": "What is an elephant?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "A 'wolf in this clothing' describes someone hiding dangerous intentions",
+          "answer": "What is sheep's clothing?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 224,
+      "round": 1,
+      "name": "BABY ANIMALS",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This name for a baby dog is also slang for puppy love",
+          "answer": "What is a puppy?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "A baby kangaroo carried in its mother's pouch goes by this name",
+          "answer": "What is a joey?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "A baby goat shares its name with a verb meaning to tease playfully",
+          "answer": "What is a kid?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "A baby swan is known by this name starting with 'C'",
+          "answer": "What is a cygnet?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "A baby eel, prized as a delicacy, is called this 5-letter name",
+          "answer": "What is an elver?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 225,
+      "round": 1,
+      "name": "STORMY WEATHER",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This funnel-shaped, rotating column of air extends from a thunderstorm to the ground",
+          "answer": "What is a tornado?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "In the Atlantic Ocean these tropical cyclones are given this name, while in the Pacific they're called typhoons",
+          "answer": "What are hurricanes?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This scale, named for a meteorologist, rates tornado intensity from EF0 to EF5",
+          "answer": "What is the Enhanced Fujita scale?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "This term describes the relatively calm, low-pressure center of a hurricane",
+          "answer": "What is the eye?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "These straight-line winds that spread out from a thunderstorm can cause widespread damage and share their name with a Spanish word for 'straight'",
+          "answer": "What is a derecho?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 226,
+      "round": 1,
+      "name": "CLOUD COVER",
+      "questions": [
+        {
+          "value": 200,
+          "question": "These puffy, cotton-like clouds often signal fair weather",
+          "answer": "What are cumulus clouds?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "These thin, wispy high-altitude clouds are made of ice crystals",
+          "answer": "What are cirrus clouds?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This towering storm cloud, associated with thunderstorms, can have an anvil-shaped top",
+          "answer": "What is cumulonimbus?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "This naturalist gave clouds their Latin names in an 1802 essay",
+          "answer": "Who is Luke Howard?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "These rare, wavy clouds resemble ocean waves and are named for the physicists who described the instability that forms them",
+          "answer": "What are Kelvin-Helmholtz clouds?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 227,
+      "round": 1,
+      "name": "MEASURING THE WEATHER",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This instrument measures temperature, often using mercury or alcohol",
+          "answer": "What is a thermometer?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "This device measures atmospheric pressure to help predict weather changes",
+          "answer": "What is a barometer?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This spinning instrument measures wind speed using cups that catch the breeze",
+          "answer": "What is an anemometer?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "Weather balloons carry this instrument package aloft to measure conditions in the upper atmosphere",
+          "answer": "What is a radiosonde?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "This type of weather radar uses the frequency shift of returning signals to detect precipitation movement and rotation",
+          "answer": "What is Doppler radar?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 228,
+      "round": 1,
+      "name": "WEATHER IDIOMS",
+      "questions": [
+        {
+          "value": 200,
+          "question": "To 'save for' this kind of day means to set money aside for hard times",
+          "answer": "What is a rainy day?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "When someone is 'on cloud' this number, they are extremely happy",
+          "answer": "What is nine?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This phrase, meaning to take a break or relax, refers to a brief pause in stormy conditions",
+          "answer": "What is a calm before the storm? (accept: weather the storm / lull)",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "To 'steal' someone's this is to take credit for their idea or diminish their moment",
+          "answer": "What is thunder?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "This idiom meaning to be undecided or wait to see which side will win compares one to looking which way this floats from a chimney",
+          "answer": "What is to see which way the wind blows?",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": 229,
+      "round": 1,
+      "name": "FRONTS & PRESSURE",
+      "questions": [
+        {
+          "value": 200,
+          "question": "This kind of front brings cooler air and is shown with blue triangles on a weather map",
+          "answer": "What is a cold front?",
+          "enabled": true
+        },
+        {
+          "value": 400,
+          "question": "High pressure systems generally bring this kind of weather: clear and sunny or stormy?",
+          "answer": "What is clear and sunny?",
+          "enabled": true
+        },
+        {
+          "value": 600,
+          "question": "This term describes a high-pressure system, indicated by an 'H' on weather maps",
+          "answer": "What is an anticyclone?",
+          "enabled": true
+        },
+        {
+          "value": 800,
+          "question": "This type of front forms when a cold front overtakes a warm front, lifting the warm air aloft",
+          "answer": "What is an occluded front?",
+          "enabled": true
+        },
+        {
+          "value": 1000,
+          "question": "Air flows from high to low pressure, but this effect, caused by Earth's rotation, deflects winds and creates circulation patterns",
+          "answer": "What is the Coriolis effect?",
+          "enabled": true
+        }
+      ]
     }
   ],
-  "nextId": 220,
-  "activeIds": []
+  "nextId": 230,
+  "activeIds": [],
+  "pages": [
+    {
+      "id": 1,
+      "name": "Page 1"
+    }
+  ]
 }
