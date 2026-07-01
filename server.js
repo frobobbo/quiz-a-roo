@@ -541,6 +541,7 @@ function publicState() {
       : Object.fromEntries(game.players.map(p => [p.id, game.finalWagers[p.id] !== undefined])),
     finalJudged:        [...game.finalJudged],
     finalAnswersLocked: game.finalAnswersLocked,
+    finalAnswers: Object.fromEntries(Object.keys(game.finalAnswers).map(id => [id, true])),
     allPlayAnswers: game.phase === 'all-play-review'
       ? JSON.parse(JSON.stringify(game.allPlayAnswers))
       : Object.fromEntries(Object.entries(game.allPlayAnswers).map(([id, v]) => [id, { submitted: true, skipped: v.skipped }])),
