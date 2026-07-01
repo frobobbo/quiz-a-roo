@@ -273,14 +273,16 @@
     #daily-double-overlay {
       display: none;
       position: fixed; inset: 0;
-      background: #000;
+      background: #0a0820;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 100;
       gap: 24px;
       text-align: center;
-      transition: background 0.3s;
+      will-change: transform;
+      transform-origin: center center;
+      overflow: hidden;
     }
     #dd-flash {
       font-family: Impact, sans-serif;
@@ -290,6 +292,14 @@
     #dd-who {
       font-size: clamp(22px, 3.5vw, 40px);
       opacity: .8;
+      transition: opacity 0.3s;
+    }
+    /* Value shown while tile is expanding */
+    #dd-tile-val {
+      font-family: Impact, sans-serif;
+      font-size: clamp(28px, 5vw, 72px);
+      letter-spacing: 4px;
+      color: var(--gold);
     }
 
     /* Style 1 — Gold Bounce (classic) */
@@ -313,6 +323,7 @@
       animation: dd-shock 0.6s ease-out forwards;
     }
     #daily-double-overlay.dd-s2 #dd-who { color: #7ef0ff; }
+    #daily-double-overlay.dd-s2 #dd-tile-val { color: #00dfff; text-shadow: 0 0 20px #00dfff; }
     @keyframes dd-shock {
       0%   { transform: scale(1.6); opacity: 0; filter: blur(12px); }
       30%  { transform: scale(0.92) skewX(-4deg); opacity: 1; filter: blur(0); }
@@ -332,6 +343,7 @@
       animation: dd-fire-in 0.5s cubic-bezier(.1,1.3,.4,1) forwards, dd-fire-shift 1.4s linear 0.5s infinite;
     }
     #daily-double-overlay.dd-s3 #dd-who { color: #ffb347; }
+    #daily-double-overlay.dd-s3 #dd-tile-val { color: #ff8c00; text-shadow: 0 0 20px #ff6600; }
     @keyframes dd-fire-in {
       0%   { transform: scale(0.2) rotate(-15deg); opacity: 0; }
       80%  { transform: scale(1.06) rotate(3deg); opacity: 1; }
@@ -341,6 +353,14 @@
       0%   { background-position: 0% 50%; }
       100% { background-position: 300% 50%; }
     }
+
+    /* Screen-flash punch on arrival */
+    @keyframes dd-arrive-flash {
+      0%   { opacity: 1; }
+      30%  { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+    .dd-arrived { animation: dd-arrive-flash 0.25s ease-out; }
 
     /* ── STEAL ── */
     #steal-flash {
@@ -553,7 +573,8 @@
 
 <!-- DAILY DOUBLE -->
 <div id="daily-double-overlay">
-  <div id="dd-flash">DAILY DOUBLE!</div>
+  <div id="dd-tile-val" style="display:none"></div>
+  <div id="dd-flash" style="display:none">DAILY DOUBLE!</div>
   <div id="dd-who"></div>
 </div>
 
@@ -635,6 +656,7 @@
   let prevBuzzId = null;
   let prevPhase = null;
   let prevDDCount = 0;
+  let ddStartRect = null;
   let timerInterval = null;
   let activeTimerEndsAt = null;
   let lastTTSKey = null;
@@ -724,7 +746,11 @@
 
     // Phase-change sound triggers
     if (state.phase !== prevPhase) {
-      if (state.phase === 'daily-double') playDailyDouble();
+      if (state.phase === 'daily-double') {
+        playDailyDouble();
+        // Capture tile position while board is still rendered
+        ddStartRect = captureDDTileRect();
+      }
       else if (state.phase === 'round-over') playRoundOver();
       else if (state.phase === 'game-over') playGameOver();
       else if (state.phase === 'final-question' && prevPhase === 'final-wager') playFinalJeopardy();
@@ -744,7 +770,8 @@
     if (state.paused && timerInterval) { clearInterval(timerInterval); timerInterval = null; activeTimerEndsAt = null; }
 
     hide('lobby'); hide('game'); hide('overlay'); hide('gameover');
-    hide('round-over'); hide('final'); hide('daily-double-overlay');
+    hide('round-over'); hide('final');
+    if (state.phase !== 'daily-double') hide('daily-double-overlay');
 
     if (state.phase === 'lobby') {
       confettiLaunched = false;
@@ -873,19 +900,89 @@
       current ? `${current.name.toUpperCase()}'S TURN TO SELECT` : '';
   }
 
-  function renderDailyDouble() {
-    const overlay = document.getElementById('daily-double-overlay');
-    const style = ((state.dailyDoubleCount - 1) % 3) + 1;
-    // Only swap class and retrigger animation when a new DD starts
-    if (state.dailyDoubleCount !== prevDDCount) {
-      prevDDCount = state.dailyDoubleCount;
-      overlay.className = '';
-      // Force reflow so removing/re-adding the class restarts the animation
-      void overlay.offsetWidth;
-      overlay.className = `dd-s${style}`;
-    }
-    show('daily-double-overlay', 'flex');
+  function captureDDTileRect() {
+    const q = state.currentQuestion;
+    if (!q) return null;
+    const currentPage = state.currentPage || 1;
+    const pageCats = state.categories.filter(c => (c.page || 1) === currentPage);
+    const cols = pageCats.length;
+    const catIdx = pageCats.findIndex(c => c.name === q.categoryName);
+    if (catIdx < 0) return null;
+    const rowIdx = pageCats[catIdx].questions.findIndex(qq => qq.value === q.value);
+    if (rowIdx < 0) return null;
+    const tiles = document.getElementById('board-grid').querySelectorAll('.q-tile');
+    const tile = tiles[rowIdx * cols + catIdx];
+    return tile ? tile.getBoundingClientRect() : null;
+  }
 
+  function renderDailyDouble() {
+    const overlay  = document.getElementById('daily-double-overlay');
+    const tileVal  = document.getElementById('dd-tile-val');
+    const flash    = document.getElementById('dd-flash');
+    const who      = document.getElementById('dd-who');
+    const style    = ((state.dailyDoubleCount - 1) % 3) + 1;
+    const isNew    = state.dailyDoubleCount !== prevDDCount;
+
+    if (isNew) {
+      prevDDCount = state.dailyDoubleCount;
+
+      // Reset any leftover styles from the previous DD
+      overlay.style.cssText = '';
+      overlay.className = `dd-s${style}`;
+
+      // Show value text during expansion; hide DAILY DOUBLE! until after
+      tileVal.textContent = `$${state.currentQuestion?.value ?? ''}`;
+      tileVal.style.display = 'block';
+      flash.style.display = 'none';
+      flash.style.animation = 'none';
+      who.style.opacity = '0';
+      who.textContent = '';
+
+      overlay.style.display = 'flex';
+
+      const rect = ddStartRect;
+      ddStartRect = null;
+
+      if (rect) {
+        // FLIP: start the full-screen overlay looking like the tile, then expand
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const scaleX = rect.width  / vw;
+        const scaleY = rect.height / vh;
+        const tx = (rect.left + rect.width  / 2) - vw / 2;
+        const ty = (rect.top  + rect.height / 2) - vh / 2;
+
+        overlay.style.transform    = `translate(${tx}px,${ty}px) scale(${scaleX},${scaleY})`;
+        overlay.style.borderRadius = '10px';
+        overlay.style.transition   = 'none';
+        void overlay.offsetWidth; // force reflow
+
+        overlay.style.transition   = 'transform 0.52s cubic-bezier(0.25,0.46,0.45,0.94), border-radius 0.52s ease';
+        overlay.style.transform    = '';
+        overlay.style.borderRadius = '';
+
+        setTimeout(() => {
+          // Tile is now full-screen — punch flash, then reveal DAILY DOUBLE!
+          overlay.style.transition = '';
+          tileVal.style.display = 'none';
+          flash.style.display   = 'block';
+          flash.style.animation = 'none';
+          flash.textContent     = 'DAILY DOUBLE!';
+          void flash.offsetWidth;           // restart animation
+          flash.style.animation = '';
+          overlay.classList.add('dd-arrived');
+          overlay.addEventListener('animationend', () => overlay.classList.remove('dd-arrived'), { once: true });
+          who.style.opacity = '';
+        }, 540);
+      } else {
+        // Fallback — no tile rect, just show overlay directly
+        tileVal.style.display = 'none';
+        flash.style.display   = 'block';
+        flash.style.animation = '';
+        who.style.opacity = '';
+      }
+    }
+
+    // Always update who text (fires on subsequent state updates too)
     let whoText = '';
     if (state.dailyDoublePlayerId) {
       const ddPlayer = state.settings?.teamMode && state.teams?.length
@@ -898,7 +995,7 @@
         : state.players[state.currentPlayerIndex];
       if (current) whoText = `${current.name.toUpperCase()} found a Daily Double!`;
     }
-    document.getElementById('dd-who').textContent = whoText;
+    who.textContent = whoText;
   }
 
   function renderOverlay() {
