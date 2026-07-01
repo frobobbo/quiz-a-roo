@@ -108,8 +108,6 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-
           if [ -z "$GHCR_TOKEN" ]; then
             echo "github.token is empty; cannot create GHCR pull secret" >&2
             exit 1
@@ -137,7 +135,6 @@ jobs:
 
           helm upgrade --install "$RELEASE_NAME" ./charts/quiz-a-roo \
             --namespace "$NAMESPACE" \
-            --create-namespace \
             "${REUSE_ARGS[@]}" \
             --set image.repository="$IMAGE_REPOSITORY" \
             --set image.tag="$IMAGE_TAG" \
