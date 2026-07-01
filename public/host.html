@@ -872,6 +872,7 @@
   // ── Generate Categories ────────────────────────────────────────────────────
 
   let genCatsCount = 3;
+  let genSourceCount = 3;
   let genCatsTab = 'random'; // 'random' | 'source'
 
   function openGenCatsModal() {
@@ -908,8 +909,10 @@
           <input id="gen-source-input" class="gen-source-input" type="text" placeholder="https://en.wikipedia.org/wiki/… or just a topic like 'Roman history'" maxlength="500" autocomplete="off">
         </div>
         <div>
-          <div class="gen-cats-label">Category Name <span style="opacity:.5">(optional)</span></div>
-          <input id="gen-source-name" class="gen-source-input" type="text" placeholder="Leave blank to let AI decide" maxlength="60" autocomplete="off">
+          <div class="gen-cats-label">How many categories?</div>
+          <div class="gen-cats-count-row" style="flex-wrap:wrap">
+            ${[1,2,3,4,5,6,8,10].map(n => `<button class="gen-cats-count-btn${n === genSourceCount ? ' active' : ''}" data-n="${n}">${n}</button>`).join('')}
+          </div>
         </div>
         <div class="gen-cats-footer">
           <button id="gen-cats-cancel-btn">Cancel</button>
@@ -918,14 +921,20 @@
       `;
       wireGenTabs(dlg);
       document.getElementById('gen-source-input').focus();
+      dlg.querySelectorAll('.gen-cats-count-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          genSourceCount = +btn.dataset.n;
+          dlg.querySelectorAll('.gen-cats-count-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
       document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
       document.getElementById('gen-cats-go-btn').addEventListener('click', () => {
         const source = document.getElementById('gen-source-input').value.trim();
-        const catName = document.getElementById('gen-source-name').value.trim();
         if (!source) return;
         const isUrl = source.startsWith('http://') || source.startsWith('https://');
-        showGenSourceLoading(isUrl ? 'Fetching URL and generating…' : 'Generating category…');
-        socket.emit('generate-category-from-source', { source, sourceType: isUrl ? 'url' : 'topic', catName });
+        const plural = genSourceCount === 1 ? 'category' : `${genSourceCount} categories`;
+        showGenSourceLoading(isUrl ? `Fetching URL and generating ${plural}…` : `Generating ${plural}…`);
+        socket.emit('generate-category-from-source', { source, sourceType: isUrl ? 'url' : 'topic', count: genSourceCount });
       });
       document.getElementById('gen-source-input').addEventListener('keydown', e => {
         if (e.key === 'Enter') document.getElementById('gen-cats-go-btn').click();
@@ -1049,47 +1058,15 @@
 
   socket.on('gen-categories-error', ({ message }) => showGenCatsError(message));
 
-  socket.on('gen-source-result', ({ category }) => {
-    if (!category || !Array.isArray(category.questions)) {
+  socket.on('gen-source-result', ({ categories }) => {
+    if (!Array.isArray(categories) || categories.length === 0) {
       showGenCatsError('Unexpected response. Try again.');
       return;
     }
-    showGenSourceResult(category);
+    showGenCatsResults(categories);
   });
 
   socket.on('gen-source-error', ({ message }) => showGenCatsError(message));
-
-  function showGenSourceResult(cat) {
-    const dlg = document.getElementById('gen-cats-dialog');
-    dlg.innerHTML = `
-      <h2>Generated Category</h2>
-      <div class="gen-cat-result">
-        <div class="gen-cat-result-header">
-          <input type="checkbox" class="gen-cat-check" checked style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
-          <input type="text" class="gen-cat-name-edit" id="gen-source-cat-name" value="${esc(cat.name)}">
-        </div>
-        <div class="gen-cat-qs">
-          ${(cat.questions || []).map(q => `
-            <div class="gen-cat-q-row">
-              <span class="gen-cat-q-val">$${q.value}</span>
-              <span class="gen-cat-q-text">${esc(q.question)}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      <div class="gen-cats-footer">
-        <button id="gen-cats-back-btn" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:12px;cursor:pointer;padding:6px 12px">← Try Another</button>
-        <button id="gen-source-add-btn" class="btn-primary">Add to Library</button>
-      </div>
-    `;
-    dlg._sourceCategory = cat;
-    document.getElementById('gen-cats-back-btn').addEventListener('click', () => { genCatsTab = 'source'; showGenCatsRequest(); });
-    document.getElementById('gen-source-add-btn').addEventListener('click', () => {
-      const name = (document.getElementById('gen-source-cat-name').value || cat.name).trim();
-      socket.emit('add-generated-categories', { categories: [{ name, questions: cat.questions }] });
-      closeGenCatsModal();
-    });
-  }
 
   function showGenCatsError(msg) {
     const dlg = document.getElementById('gen-cats-dialog');

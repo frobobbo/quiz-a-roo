@@ -1858,11 +1858,12 @@ JSON format (return exactly this structure, no extra text):
     broadcast();
   });
 
-  socket.on('generate-category-from-source', async ({ source, sourceType, catName }) => {
+  socket.on('generate-category-from-source', async ({ source, sourceType, count }) => {
     if (!anthropic) {
       socket.emit('gen-source-error', { message: 'Anthropic API not configured. Add your key to config.json.' });
       return;
     }
+    const n = Math.min(Math.max(parseInt(count) || 1, 1), 10);
     try {
       let contextText = '';
       if (sourceType === 'url') {
@@ -1871,19 +1872,18 @@ JSON format (return exactly this structure, no extra text):
         contextText = (source || '').trim();
       }
       if (!contextText) { socket.emit('gen-source-error', { message: 'No content provided.' }); return; }
-      const nameHint = catName ? ` Name the category "${catName.trim()}" unless a more fitting name exists.` : '';
       const userContent = sourceType === 'url'
-        ? `Based on this webpage content, create exactly 1 Jeopardy! category.${nameHint} Focus on specific, testable facts:\n\n${contextText.slice(0, 4000)}`
-        : `Create exactly 1 Jeopardy! category about: "${contextText}".${nameHint}`;
+        ? `Based on this webpage content, create exactly ${n} distinct Jeopardy! ${n === 1 ? 'category' : 'categories'}. Each should cover a different angle or subtopic of the content. Focus on specific, testable facts:\n\n${contextText.slice(0, 5000)}`
+        : `Create exactly ${n} distinct Jeopardy! ${n === 1 ? 'category' : 'categories'} about: "${contextText}". Each should cover a clearly different angle or subtopic.`;
       const msg = await anthropic.messages.create({
         model: 'claude-opus-4-8',
-        max_tokens: 2000,
-        system: `You are an expert Jeopardy! question writer. Create exactly one category with 5 clues at $200, $400, $600, $800, $1000 escalating in difficulty. Clues must be statements answered with "What is/Who is ___?". Return ONLY valid JSON, no markdown: {"name":"CATEGORY NAME","questions":[{"value":200,"question":"clue","answer":"answer"},{"value":400,"question":"clue","answer":"answer"},{"value":600,"question":"clue","answer":"answer"},{"value":800,"question":"clue","answer":"answer"},{"value":1000,"question":"clue","answer":"answer"}]}`,
+        max_tokens: n * 1200,
+        system: `You are an expert Jeopardy! question writer. Create ${n} distinct ${n === 1 ? 'category' : 'categories'}, each with 5 clues at $200, $400, $600, $800, $1000 escalating in difficulty. Each category must cover a clearly different angle. Clues must be statements answered with "What is/Who is ___?". Return ONLY valid JSON, no markdown: {"categories":[{"name":"CATEGORY NAME","questions":[{"value":200,"question":"clue","answer":"answer"},{"value":400,"question":"clue","answer":"answer"},{"value":600,"question":"clue","answer":"answer"},{"value":800,"question":"clue","answer":"answer"},{"value":1000,"question":"clue","answer":"answer"}]}]}`,
         messages: [{ role: 'user', content: userContent }],
       });
       const raw = msg.content[0].text.trim().replace(/^```[^\n]*\n?/, '').replace(/```\s*$/, '');
       const data = JSON.parse(raw);
-      socket.emit('gen-source-result', { category: data });
+      socket.emit('gen-source-result', { categories: Array.isArray(data.categories) ? data.categories : [data] });
     } catch (e) {
       socket.emit('gen-source-error', { message: e.message || 'Generation failed.' });
     }
