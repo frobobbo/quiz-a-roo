@@ -1987,7 +1987,7 @@ async function main() {
   server.listen(PORT, '0.0.0.0', async () => {
     await buildQR();
     const ip = getLocalIP();
-    console.log('\n  TRIVIA NIGHT SERVER');
+    console.log('\n  QUIZ-A-ROO SERVER');
     console.log('  ─────────────────────────────────────────');
     console.log(`  Board  (TV):    http://${ip}:${PORT}/board`);
     console.log(`  Host:           http://${ip}:${PORT}/host  (PIN: ${HOST_PIN})`);

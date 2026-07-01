@@ -3,26 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trivia Night — Settings</title>
+  <title>quiz-a-roo — Settings</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --blue:   #0a0a3a;
-      --dark:   #16166a;
-      --darker: #0d0d4a;
-      --gold:   #c09a38;
+      --blue:   #02040f;
+      --dark:   #082a8f;
+      --darker: #020719;
+      --gold:   #ffb21a;
       --white:  #ffffff;
-      --border: rgba(255,255,255,.12);
-      --panel:  #12123a;
+      --border: rgba(255,178,26,.24);
+      --panel:  #06123f;
       --green:  #44bb77;
       --red:    #cc4444;
     }
-    html, body { min-height: 100%; background: var(--blue); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    html, body { min-height: 100%; background: radial-gradient(circle at 50% -10%, rgba(54,134,255,.32), transparent 42%), radial-gradient(circle at 18% 100%, rgba(119,38,255,.26), transparent 30%), var(--blue); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     body { padding: 0 0 60px; }
 
     header {
       display: flex; align-items: center; gap: 12px; padding: 0 24px;
-      height: 50px; background: #080820; border-bottom: 1px solid var(--border);
+      height: 50px; background: #020719; border-bottom: 1px solid var(--border);
       position: sticky; top: 0; z-index: 10;
     }
     header h1 { font-family: Impact, sans-serif; font-size: 16px; letter-spacing: 3px; color: var(--gold); flex: 1; }
@@ -359,15 +359,15 @@
       <div class="tp-color-row">
         <div class="tp-color-item">
           <label for="tp-bg">Background</label>
-          <input type="color" id="tp-bg" value="#0a0a3a">
+          <input type="color" id="tp-bg" value="#02040f">
         </div>
         <div class="tp-color-item">
           <label for="tp-cards">Cards</label>
-          <input type="color" id="tp-cards" value="#16166a">
+          <input type="color" id="tp-cards" value="#082a8f">
         </div>
         <div class="tp-color-item">
           <label for="tp-accent">Accent</label>
-          <input type="color" id="tp-accent" value="#c09a38">
+          <input type="color" id="tp-accent" value="#ffb21a">
         </div>
       </div>
       <button class="btn-apply-custom" id="apply-custom-btn">Apply Custom Theme</button>
@@ -383,7 +383,7 @@
   socket.emit('join-host');
 
   const THEMES = [
-    { id: 'classic',  label: 'Classic',  main: '#0a0a3a', accent: '#c09a38' },
+    { id: 'classic',  label: 'quiz-a-roo', main: '#051447', accent: '#ffb21a' },
     { id: 'midnight', label: 'Midnight', main: '#05050f', accent: '#4488ff' },
     { id: 'retro',    label: 'Retro',    main: '#1a0a00', accent: '#ff8c00' },
     { id: 'forest',   label: 'Forest',   main: '#051a05', accent: '#44cc66' },

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>quiz-a-roo — Host unforgettable quiz games</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #02040f; --navy: #06123f; --blue: #0b47d8; --cyan: #38a4ff;
+      --violet: #6e28ff; --gold: #ffb21a; --orange: #ff7a00; --white: #ffffff;
+      --muted: rgba(255,255,255,.72); --panel: rgba(6,18,63,.78); --line: rgba(255,178,26,.26);
+    }
+    html, body { min-height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--white);
+      background: radial-gradient(circle at 50% -20%, rgba(56,164,255,.36), transparent 34%), radial-gradient(circle at 16% 92%, rgba(110,40,255,.34), transparent 28%), radial-gradient(circle at 84% 92%, rgba(11,71,216,.32), transparent 30%), linear-gradient(180deg, #02040f 0%, #040a24 48%, #02040f 100%);
+      overflow-x: hidden;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .55;
+      background: linear-gradient(100deg, transparent 7%, rgba(56,164,255,.18) 8%, transparent 13%) 0 0/18% 100%, linear-gradient(80deg, transparent 11%, rgba(110,40,255,.16) 12%, transparent 17%) 0 0/22% 100%;
+      mix-blend-mode: screen;
+    }
+    .nav { position: relative; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 22px clamp(18px, 4vw, 56px); }
+    .nav a, .cta a { text-decoration: none; font-weight: 800; letter-spacing: .4px; border-radius: 999px; transition: transform .15s, filter .15s, border-color .15s; }
+    .nav a:hover, .cta a:hover { transform: translateY(-1px); filter: brightness(1.1); }
+    .btn-login { color: var(--white); border: 1px solid rgba(255,255,255,.28); padding: 10px 18px; background: rgba(255,255,255,.07); }
+    .btn-register, .primary { color: #120700; background: linear-gradient(180deg, #ffd35a, var(--gold) 58%, var(--orange)); padding: 11px 20px; box-shadow: 0 0 28px rgba(255,178,26,.38); }
+    .hero { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 22px clamp(18px, 4vw, 56px) 78px; display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr); gap: clamp(28px, 6vw, 72px); align-items: center; }
+    .logo-card { position: relative; border: 2px solid var(--line); border-radius: 34px; padding: clamp(12px, 2vw, 20px); background: linear-gradient(180deg, rgba(8,42,143,.7), rgba(2,7,25,.86)); box-shadow: 0 0 50px rgba(11,71,216,.44), inset 0 0 34px rgba(255,178,26,.08); }
+    .logo-card::before { content: ''; position: absolute; inset: -8px; border-radius: 40px; z-index: -1; background: radial-gradient(circle, rgba(255,178,26,.9) 0 3px, transparent 4px) 0 0/32px 32px; opacity: .5; filter: drop-shadow(0 0 8px var(--gold)); }
+    .logo-card img { width: 100%; display: block; border-radius: 24px; box-shadow: 0 22px 60px rgba(0,0,0,.55); }
+    .eyebrow { color: var(--gold); text-transform: uppercase; letter-spacing: 3px; font-weight: 900; font-size: 13px; margin-bottom: 16px; }
+    h1 { font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: clamp(48px, 7.2vw, 96px); line-height: .9; letter-spacing: 1px; text-transform: lowercase; white-space: nowrap; text-shadow: 0 8px 28px rgba(0,0,0,.55); }
+    h1 span { color: var(--gold); text-shadow: 0 0 22px rgba(255,178,26,.5); }
+    .lead { margin-top: 24px; color: var(--muted); font-size: clamp(18px, 2.2vw, 23px); line-height: 1.48; max-width: 640px; }
+    .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 30px; }
+    .secondary { color: var(--white); border: 1px solid rgba(255,255,255,.26); padding: 12px 20px; background: rgba(255,255,255,.07); }
+    .features { position: relative; z-index: 1; max-width: 1180px; margin: -34px auto 0; padding: 0 clamp(18px, 4vw, 56px) 70px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .feature { background: var(--panel); border: 1px solid rgba(255,255,255,.12); border-top-color: var(--line); border-radius: 20px; padding: 22px; box-shadow: 0 18px 44px rgba(0,0,0,.32); backdrop-filter: blur(8px); }
+    .feature b { display: block; color: var(--gold); font-size: 18px; margin-bottom: 8px; }
+    .feature p { color: var(--muted); line-height: 1.45; }
+    @media (max-width: 860px) { .hero { grid-template-columns: 1fr; padding-top: 8px; } .copy { order: 2; } .logo-card { order: 1; } .features { grid-template-columns: 1fr; margin-top: 0; } .nav { justify-content: center; } }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="Account actions">
+    <a class="btn-login" href="login">Login</a>
+    <a class="btn-register" href="login?mode=register">Register</a>
+  </nav>
+  <main>
+    <section class="hero">
+      <div class="copy">
+        <div class="eyebrow">Game-show energy for any room</div>
+        <h1>quiz<span>-a-</span>roo</h1>
+        <p class="lead">Build polished Jeopardy-style games, host from one screen, let players buzz from their phones, and keep every user’s boards, categories, settings, and history neatly separated.</p>
+        <div class="cta">
+          <a class="primary" href="login?mode=register">Create your board</a>
+          <a class="secondary" href="login">Host login</a>
+        </div>
+      </div>
+      <div class="logo-card" aria-label="quiz-a-roo logo">
+        <img src="assets/quiz-a-roo-logo.jpg" alt="quiz-a-roo logo with marquee lights and blue stage beams">
+      </div>
+    </section>
+    <section class="features" aria-label="quiz-a-roo features">
+      <article class="feature"><b>Live host control</b><p>Run the full board, reveal answers, score teams, manage rounds, and launch Final Jeopardy-style moments from the host console.</p></article>
+      <article class="feature"><b>Player phones join instantly</b><p>Players join from a QR code, choose names and emojis, buzz in, answer all-play questions, and stay engaged from any device.</p></article>
+      <article class="feature"><b>Reusable quiz libraries</b><p>Create categories, generate questions with AI, organize multiple libraries/pages, and keep personalized settings and history per user.</p></article>
+    </section>
+  </main>
+</body>
+</html>

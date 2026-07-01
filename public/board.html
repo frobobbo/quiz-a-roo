@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trivia Night — Board</title>
+  <title>quiz-a-roo — Board</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --blue: #1a28b0;
-      --dark: #16166a;
-      --darker: #101052;
-      --used: #111133;
-      --gold: #c09a38;
+      --blue: #051447;
+      --dark: #082a8f;
+      --darker: #020719;
+      --used: #080b2a;
+      --gold: #ffb21a;
       --white: #fff;
       --correct: #2e7a40;
       --wrong: #9e3535;
@@ -52,7 +52,7 @@
 
     html, body {
       width: 100%; height: 100%;
-      background: var(--blue);
+      background: radial-gradient(circle at 50% -10%, rgba(54,134,255,.32), transparent 42%), radial-gradient(circle at 18% 100%, rgba(119,38,255,.26), transparent 30%), var(--blue);
       color: var(--white);
       font-family: Georgia, 'Times New Roman', serif;
       overflow: hidden;
@@ -511,7 +511,7 @@
 
 <!-- LOBBY -->
 <div id="lobby">
-  <h1>Trivia Night</h1>
+  <h1>quiz-a-roo</h1>
   <div class="join-box">
     <div class="qr-wrap"><img id="qr-img" src="" alt="QR Code"></div>
     <div class="label">Scan to join on your phone</div>

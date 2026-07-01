@@ -1,5 +1,5 @@
 {
-  "name": "trivia",
+  "name": "quiz-a-roo",
   "version": "1.0.0",
   "description": "Jeopardy-style multiplayer trivia game",
   "main": "server.js",

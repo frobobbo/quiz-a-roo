@@ -1,6 +1,6 @@
 # Quiz-a-Roo
 
-A Jeopardy-style multiplayer trivia game for trivia nights. One host runs the game from a laptop, players join on their phones, and the game board displays on a TV.
+A Jeopardy-style multiplayer trivia game for quiz-a-roo nights. One host runs the game from a laptop, players join on their phones, and the game board displays on a TV.
 
 ## Setup
 
