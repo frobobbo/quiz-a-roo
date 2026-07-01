@@ -91,10 +91,11 @@ jobs:
             chmod +x "$RUNNER_TEMP/bin/helm"
           fi
 
-      - name: Verify in-cluster access
+      - name: Verify in-cluster deploy permissions
         run: |
           set -euo pipefail
-          kubectl cluster-info
+          # Avoid cluster-wide API discovery here; keep the runner least-privileged
+          # by checking only the app namespace.
           kubectl auth can-i get deployments -n "$NAMESPACE"
           kubectl auth can-i patch deployments -n "$NAMESPACE"
           kubectl auth can-i get secrets -n "$NAMESPACE"
