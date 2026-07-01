@@ -1,0 +1,6 @@
+apiVersion: v2
+name: quiz-a-roo
+description: A Helm chart for Quiz-a-Roo, a multiplayer Jeopardy-style trivia game
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

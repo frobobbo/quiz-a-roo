@@ -9,9 +9,22 @@ const QRCode = require('qrcode');
 const { defaultQuestions } = require('./questions');
 const Anthropic = require('@anthropic-ai/sdk');
 
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+
+function dataPath(...parts) {
+  return path.join(DATA_DIR, ...parts);
+}
+
+function ensureDataDir() {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); }
+  catch (e) { console.warn('Could not create data directory:', e.message); }
+}
+
+ensureDataDir();
+
 function loadConfig() {
   try {
-    const cfgPath = path.join(__dirname, 'config.json');
+    const cfgPath = dataPath('config.json');
     if (fs.existsSync(cfgPath)) return JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   } catch (e) { console.warn('Could not read config.json:', e.message); }
   return {};
@@ -23,10 +36,10 @@ let anthropic = apiKey ? new Anthropic({ apiKey, httpAgent: new https.Agent({ re
 let elevenLabsKey = config.ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY || '';
 
 const PORT = process.env.PORT || 3000;
-const LIBRARY_FILE = path.join(__dirname, 'library.json');
-const LIBRARIES_DIR = path.join(__dirname, 'libraries');
-const HISTORY_FILE = path.join(__dirname, 'history.json');
-const APP_SETTINGS_FILE = path.join(__dirname, 'app-settings.json');
+const LIBRARY_FILE = dataPath('library.json');
+const LIBRARIES_DIR = dataPath('libraries');
+const HISTORY_FILE = dataPath('history.json');
+const APP_SETTINGS_FILE = dataPath('app-settings.json');
 
 // ── History ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +123,8 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 
 app.get('/board',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'board.html')));
 app.get('/player', (req, res) => res.sendFile(path.join(__dirname, 'public', 'player.html')));
@@ -227,7 +242,7 @@ app.post('/api/app-settings', requireHost, (req, res) => {
       cfg.ELEVENLABS_API_KEY = trimmed;
       elevenLabsKey = trimmed;
     }
-    try { fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(cfg, null, 2)); }
+    try { fs.writeFileSync(dataPath('config.json'), JSON.stringify(cfg, null, 2)); }
     catch (e) { return res.status(500).json({ error: 'Failed to save API key.' }); }
   }
   if (gameDefaults && typeof gameDefaults === 'object') appSettings.gameDefaults = { ...appSettings.gameDefaults, ...gameDefaults };

@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.git
+.github
+Dockerfile
+.dockerignore
+charts
+README.md
+*.md
+.env
+config.json
+app-settings.json
+history.json
+libraries
