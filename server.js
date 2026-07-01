@@ -12,6 +12,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const settingsRepo = require('./db/repositories/settingsRepo');
 const libraryRepo = require('./db/repositories/libraryRepo');
 const historyRepo = require('./db/repositories/historyRepo');
+const userRepo = require('./db/repositories/userRepo');
 
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 
@@ -44,7 +45,7 @@ const PORT = process.env.PORT || 3000;
 // ── History ───────────────────────────────────────────────────────────────────
 
 function saveHistory() {
-  historyRepo.saveHistoryFile(history).catch(e => console.error('saveHistory error:', e));
+  historyRepo.saveHistoryFile(history, activeUserId).catch(e => console.error('saveHistory error:', e));
 }
 
 let history = [];
@@ -52,7 +53,7 @@ let history = [];
 // ── App settings (persistent defaults) ───────────────────────────────────────
 
 function saveAppSettings() {
-  settingsRepo.saveAppSettings(appSettings).catch(e => console.error('saveAppSettings error:', e));
+  settingsRepo.saveAppSettings(appSettings, activeUserId).catch(e => console.error('saveAppSettings error:', e));
 }
 
 let appSettings = { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
@@ -81,7 +82,7 @@ function recordGameResult() {
   history.unshift(entry);
   if (history.length > 50) history = history.slice(0, 50);
   // Persist asynchronously (DB: inserts one row; file: rewrites the array).
-  historyRepo.appendHistory(entry).then(refreshed => {
+  historyRepo.appendHistory(entry, 50, activeUserId).then(refreshed => {
     if (refreshed !== null) history = refreshed;
     else saveHistory();
   }).catch(e => console.error('recordGameResult persist error:', e));
@@ -115,20 +116,108 @@ app.use(express.json());
 
 app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+function parseCookies(req) {
+  const out = {};
+  const header = req.headers.cookie || '';
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 1) continue;
+    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+  }
+  return out;
+}
+
+async function getCurrentUser(req) {
+  const cookies = parseCookies(req);
+  const token = cookies.auth_token;
+  if (!token) return null;
+  try {
+    const session = await userRepo.getSession(token);
+    if (!session) return null;
+    return { id: session.userId, token };
+  } catch {
+    return null;
+  }
+}
+
+// Active user id for process-global state (last logged-in host user).
+let activeUserId = 1;
+
+async function loadUserState(userId) {
+  activeUserId = userId;
+  appSettings = await settingsRepo.loadAppSettings({ gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null }, userId);
+  history = await historyRepo.loadHistory(50, userId);
+  await libraryRepo.initializeLibraries(appSettings, userId);
+  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
+  libraryNames = await libraryRepo.listLibraries(userId);
+  lib = await libraryRepo.loadLibrary(appSettings.activeLibrary, userId);
+  if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+}
+
+// ── Login / logout routes ─────────────────────────────────────────────────────
+
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+
+app.post('/login', async (req, res) => {
+  const username = (req.body.username || '').trim();
+  const password = req.body.password || '';
+  if (!username || !password) return res.redirect('login?error=missing');
+  let user;
+  try {
+    user = await userRepo.getOrCreateUser(username, password);
+  } catch {
+    return res.redirect('login?error=invalid');
+  }
+  const token = await userRepo.createSession(user.id);
+  await loadUserState(user.id);
+  const next = (req.query.next === 'host') ? 'host' : 'host';
+  res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
+  res.redirect(next);
+});
+
+app.get('/logout', async (req, res) => {
+  const cookies = parseCookies(req);
+  if (cookies.auth_token) await userRepo.deleteSession(cookies.auth_token).catch(() => {});
+  res.setHeader('Set-Cookie', [
+    'auth_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+    'host_auth=; Path=/; SameSite=Strict; Max-Age=0',
+  ]);
+  res.redirect('login');
+});
+
+app.post('/logout', async (req, res) => {
+  const cookies = parseCookies(req);
+  if (cookies.auth_token) await userRepo.deleteSession(cookies.auth_token).catch(() => {});
+  res.setHeader('Set-Cookie', [
+    'auth_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+    'host_auth=; Path=/; SameSite=Strict; Max-Age=0',
+  ]);
+  res.redirect('login');
+});
+
 app.get('/board',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'board.html')));
 app.get('/player', (req, res) => res.sendFile(path.join(__dirname, 'public', 'player.html')));
 
-app.get('/host', (req, res) => {
-  const cookie = req.headers.cookie || '';
-  const m = cookie.match(/host_auth=([a-f0-9]+)/);
-  if (m && m[1] === HOST_TOKEN) return res.sendFile(path.join(__dirname, 'public', 'host.html'));
+app.get('/host', async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) return res.redirect('login?next=host');
+  if (user.id !== activeUserId) await loadUserState(user.id);
+  const cookies = parseCookies(req);
+  if (cookies.host_auth === HOST_TOKEN) return res.sendFile(path.join(__dirname, 'public', 'host.html'));
   res.sendFile(path.join(__dirname, 'public', 'host-pin.html'));
 });
+
 function requireHost(req, res, next) {
-  const cookie = req.headers.cookie || '';
-  const m = cookie.match(/host_auth=([a-f0-9]+)/);
-  if (m && m[1] === HOST_TOKEN) return next();
-  res.status(403).json({ error: 'Forbidden' });
+  getCurrentUser(req).then(async user => {
+    if (!user) return res.status(403).json({ error: 'Forbidden' });
+    const cookies = parseCookies(req);
+    if (cookies.host_auth !== HOST_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+    if (user.id !== activeUserId) await loadUserState(user.id);
+    req.user = user;
+    next();
+  }).catch(() => res.status(403).json({ error: 'Forbidden' }));
 }
 
 app.get('/api/history', requireHost, (req, res) => res.json(history));
@@ -261,7 +350,7 @@ function listLibraries() {
 }
 
 function saveLibrary() {
-  libraryRepo.saveLibrary(appSettings.activeLibrary || 'Default', lib)
+  libraryRepo.saveLibrary(appSettings.activeLibrary || 'Default', lib, activeUserId)
     .catch(e => console.error('saveLibrary error:', e));
 }
 
@@ -1653,7 +1742,7 @@ JSON format (return exactly this structure, no extra text):
       socket.emit('game-error', 'A library with that name already exists.'); return;
     }
     const empty = { categories: [], nextId: 0, activeIds: [], pages: [{ id: 1, name: 'Page 1' }] };
-    try { await libraryRepo.createLibrary(safeName, empty); } catch (e) { return; }
+    try { await libraryRepo.createLibrary(safeName, empty, activeUserId); } catch (e) { return; }
     libraryNames = [...libraryNames, safeName].sort();
     broadcastLibrary();
   });
@@ -1664,7 +1753,7 @@ JSON format (return exactly this structure, no extra text):
     saveLibrary();
     appSettings.activeLibrary = name;
     saveAppSettings();
-    lib = await libraryRepo.loadLibrary(name);
+    lib = await libraryRepo.loadLibrary(name, activeUserId);
     if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
     broadcastLibrary();
   });
@@ -1672,12 +1761,12 @@ JSON format (return exactly this structure, no extra text):
   socket.on('delete-library', async ({ name } = {}) => {
     if (!libraryNames.includes(name)) return;
     if (libraryNames.length <= 1) { socket.emit('game-error', 'Cannot delete the only library.'); return; }
-    try { await libraryRepo.deleteLibrary(name); } catch (e) { return; }
+    try { await libraryRepo.deleteLibrary(name, activeUserId); } catch (e) { return; }
     libraryNames = libraryNames.filter(l => l !== name);
     if (appSettings.activeLibrary === name) {
       appSettings.activeLibrary = libraryNames[0] || 'Default';
       saveAppSettings();
-      lib = await libraryRepo.loadLibrary(appSettings.activeLibrary);
+      lib = await libraryRepo.loadLibrary(appSettings.activeLibrary, activeUserId);
       if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
     }
     broadcastLibrary();
@@ -1689,7 +1778,7 @@ JSON format (return exactly this structure, no extra text):
     if (libraryNames.some(l => l.toLowerCase() === safeName.toLowerCase() && l !== oldName)) {
       socket.emit('game-error', 'A library with that name already exists.'); return;
     }
-    try { await libraryRepo.renameLibrary(oldName, safeName); } catch (e) { return; }
+    try { await libraryRepo.renameLibrary(oldName, safeName, activeUserId); } catch (e) { return; }
     libraryNames = libraryNames.map(l => l === oldName ? safeName : l).sort();
     if (appSettings.activeLibrary === oldName) {
       appSettings.activeLibrary = safeName;
@@ -1873,7 +1962,7 @@ JSON format (return exactly this structure, no extra text):
   socket.on('clear-history', () => {
     if (!io.sockets.adapter.rooms.get('host')?.has(socket.id)) return;
     history = [];
-    historyRepo.clearHistory().catch(e => console.error('clearHistory error:', e));
+    historyRepo.clearHistory(activeUserId).catch(e => console.error('clearHistory error:', e));
     socket.emit('history-data', history);
   });
 
@@ -1888,22 +1977,12 @@ JSON format (return exactly this structure, no extra text):
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Load persistent state asynchronously before accepting connections.
-  appSettings = await settingsRepo.loadAppSettings({ gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null });
-
-  history = await historyRepo.loadHistory();
-
-  // initializeLibraries must run before we default activeLibrary so that the
-  // legacy library.json → libraries/Default.json migration condition fires correctly.
-  await libraryRepo.initializeLibraries(appSettings);
-  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
-  libraryNames = await libraryRepo.listLibraries();
-
-  lib = await libraryRepo.loadLibrary(appSettings.activeLibrary);
-  if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+  // Load default-user persistent state asynchronously before accepting connections.
+  // Actual host login switches this process-global state to the authenticated user.
+  await loadUserState(1);
 
   // Persist any settings mutations that happened during initialization.
-  await settingsRepo.saveAppSettings(appSettings).catch(() => {});
+  await settingsRepo.saveAppSettings(appSettings, activeUserId).catch(() => {});
 
   server.listen(PORT, '0.0.0.0', async () => {
     await buildQR();

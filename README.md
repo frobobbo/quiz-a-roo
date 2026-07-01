@@ -32,6 +32,19 @@ All configuration lives at `/settings` (host-gated). No manual file editing requ
 
 Get an Anthropic API key at [console.anthropic.com](https://console.anthropic.com).
 
+## User login
+
+Hosts must sign in at `/login` before opening `/host`. Entering a new username creates that user; using an existing username requires the original password. The existing host PIN (`2653`) remains as a second gate for the host panel.
+
+Each user gets isolated persisted data:
+
+- quiz libraries/categories/questions
+- active library and host settings
+- game defaults/theme settings
+- game history
+
+**Current active-board limitation:** persisted data is scoped per user, but the live Socket.IO game board remains process-global in this pass. In practice, one active hosted game should run per app instance at a time. Switching host users loads that user's persisted board/library/settings state.
+
 ## Features
 
 - **Two rounds** with Daily Doubles and Final Jeopardy

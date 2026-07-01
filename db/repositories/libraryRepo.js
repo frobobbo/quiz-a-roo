@@ -18,10 +18,10 @@ function defaultLibrary() {
   };
 }
 
-async function listLibraries() {
+async function listLibraries(userId = 1) {
   if (hasDatabase()) {
     try {
-      const { rows } = await query('select name from libraries order by name');
+      const { rows } = await query('select name from libraries where user_id = $1 order by name', [userId]);
       const names = rows.map(r => r.name);
       return names.length ? names : ['Default'];
     } catch (e) {
@@ -41,10 +41,10 @@ async function listLibraries() {
   }
 }
 
-async function loadLibrary(name) {
+async function loadLibrary(name, userId = 1) {
   if (hasDatabase()) {
     try {
-      const { rows } = await query('select data from libraries where name = $1', [name]);
+      const { rows } = await query('select data from libraries where user_id = $1 and name = $2', [userId, name]);
       if (rows.length > 0) return rows[0].data;
     } catch (e) {
       console.warn(`[db] loadLibrary(${name}) failed:`, e.message);
@@ -61,13 +61,13 @@ async function loadLibrary(name) {
   return defaultLibrary();
 }
 
-async function saveLibrary(name, lib) {
+async function saveLibrary(name, lib, userId = 1) {
   if (hasDatabase()) {
     try {
       await query(
-        `insert into libraries (name, data, updated_at) values ($1, $2::jsonb, now())
-         on conflict (name) do update set data = $2::jsonb, updated_at = now()`,
-        [name, JSON.stringify(lib)]
+        `insert into libraries (user_id, name, data, updated_at) values ($1, $2, $3::jsonb, now())
+         on conflict (user_id, name) do update set data = $3::jsonb, updated_at = now()`,
+        [userId, name, JSON.stringify(lib)]
       );
     } catch (e) {
       console.error(`[db] saveLibrary(${name}) failed:`, e.message);
@@ -82,12 +82,12 @@ async function saveLibrary(name, lib) {
   }
 }
 
-async function createLibrary(name, lib) {
+async function createLibrary(name, lib, userId = 1) {
   if (hasDatabase()) {
     try {
       await query(
-        'insert into libraries (name, data) values ($1, $2::jsonb) on conflict (name) do nothing',
-        [name, JSON.stringify(lib)]
+        'insert into libraries (user_id, name, data) values ($1, $2, $3::jsonb) on conflict (user_id, name) do nothing',
+        [userId, name, JSON.stringify(lib)]
       );
     } catch (e) {
       console.error(`[db] createLibrary(${name}) failed:`, e.message);
@@ -99,19 +99,19 @@ async function createLibrary(name, lib) {
   fs.writeFileSync(path.join(LIBRARIES_DIR, name + '.json'), JSON.stringify(lib, null, 2));
 }
 
-async function deleteLibrary(name) {
+async function deleteLibrary(name, userId = 1) {
   if (hasDatabase()) {
-    await query('delete from libraries where name = $1', [name]);
+    await query('delete from libraries where user_id = $1 and name = $2', [userId, name]);
     return;
   }
   fs.unlinkSync(path.join(LIBRARIES_DIR, name + '.json'));
 }
 
-async function renameLibrary(oldName, newName) {
+async function renameLibrary(oldName, newName, userId = 1) {
   if (hasDatabase()) {
     await query(
-      'update libraries set name = $1, updated_at = now() where name = $2',
-      [newName, oldName]
+      'update libraries set name = $1, updated_at = now() where user_id = $2 and name = $3',
+      [newName, userId, oldName]
     );
     return;
   }
@@ -122,8 +122,8 @@ async function renameLibrary(oldName, newName) {
 }
 
 // Ensures file-mode legacy library.json is migrated to named libraries, and
-// in DB mode imports any existing JSON files if the libraries table is empty.
-async function initializeLibraries(appSettings) {
+// in DB mode imports any existing JSON files if the libraries table is empty for that user.
+async function initializeLibraries(appSettings, userId = 1) {
   if (!hasDatabase()) {
     // File mode: ensure directory exists and migrate legacy single-file library
     if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
@@ -139,9 +139,9 @@ async function initializeLibraries(appSettings) {
     return;
   }
 
-  // DB mode: import existing JSON files if the table is empty
+  // DB mode: import existing JSON files if the table is empty for this user
   try {
-    const { rows } = await query('select count(*)::int as cnt from libraries');
+    const { rows } = await query('select count(*)::int as cnt from libraries where user_id = $1', [userId]);
     if (rows[0].cnt > 0) return;
 
     if (fs.existsSync(LIBRARIES_DIR)) {
@@ -151,8 +151,8 @@ async function initializeLibraries(appSettings) {
         try {
           const data = JSON.parse(fs.readFileSync(path.join(LIBRARIES_DIR, file), 'utf8'));
           await query(
-            'insert into libraries (name, data) values ($1, $2::jsonb) on conflict (name) do nothing',
-            [libName, JSON.stringify(data)]
+            'insert into libraries (user_id, name, data) values ($1, $2, $3::jsonb) on conflict (user_id, name) do nothing',
+            [userId, libName, JSON.stringify(data)]
           );
           console.log(`[db] Imported library: ${libName}`);
         } catch (e) {
@@ -163,8 +163,8 @@ async function initializeLibraries(appSettings) {
       try {
         const data = JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
         await query(
-          'insert into libraries (name, data) values ($1, $2::jsonb) on conflict (name) do nothing',
-          ['Default', JSON.stringify(data)]
+          'insert into libraries (user_id, name, data) values ($1, $2, $3::jsonb) on conflict (user_id, name) do nothing',
+          [userId, 'Default', JSON.stringify(data)]
         );
         console.log('[db] Imported legacy library.json as Default');
       } catch (e) {
@@ -172,15 +172,15 @@ async function initializeLibraries(appSettings) {
       }
     }
 
-    // Always ensure Default exists
+    // Always ensure Default exists for this user
     const { rows: check } = await query(
-      'select count(*)::int as cnt from libraries where name = $1',
-      ['Default']
+      'select count(*)::int as cnt from libraries where user_id = $1 and name = $2',
+      [userId, 'Default']
     );
     if (check[0].cnt === 0) {
       await query(
-        'insert into libraries (name, data) values ($1, $2::jsonb)',
-        ['Default', JSON.stringify(defaultLibrary())]
+        'insert into libraries (user_id, name, data) values ($1, $2, $3::jsonb)',
+        [userId, 'Default', JSON.stringify(defaultLibrary())]
       );
       console.log('[db] Created default library');
     }

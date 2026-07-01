@@ -11,12 +11,12 @@ function dataPath(...parts) {
 
 const DEFAULT_APP_SETTINGS = { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
 
-async function loadAppSettings(defaultValue = DEFAULT_APP_SETTINGS) {
+async function loadAppSettings(defaultValue = DEFAULT_APP_SETTINGS, userId = 1) {
   if (hasDatabase()) {
     try {
       const { rows } = await query(
-        'select value from app_settings where key = $1',
-        ['app-settings']
+        'select value from app_settings where user_id = $1 and key = $2',
+        [userId, 'app-settings']
       );
       if (rows.length > 0) return rows[0].value;
     } catch (e) {
@@ -33,13 +33,13 @@ async function loadAppSettings(defaultValue = DEFAULT_APP_SETTINGS) {
   return defaultValue;
 }
 
-async function saveAppSettings(settings) {
+async function saveAppSettings(settings, userId = 1) {
   if (hasDatabase()) {
     try {
       await query(
-        `insert into app_settings (key, value, updated_at) values ($1, $2::jsonb, now())
-         on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
-        ['app-settings', JSON.stringify(settings)]
+        `insert into app_settings (user_id, key, value, updated_at) values ($1, $2, $3::jsonb, now())
+         on conflict (user_id, key) do update set value = $3::jsonb, updated_at = now()`,
+        [userId, 'app-settings', JSON.stringify(settings)]
       );
     } catch (e) {
       console.error('[db] saveAppSettings failed:', e.message);

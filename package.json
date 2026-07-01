@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "npx nodemon server.js",
-    "db:migrate": "node db/migrate.js"
+    "db:migrate": "node db/migrate.js",
+    "test": "node tests/user-auth.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3",
