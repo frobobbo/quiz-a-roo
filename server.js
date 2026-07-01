@@ -246,9 +246,9 @@ app.post('/api/app-settings', requireHost, (req, res) => {
 app.post('/host-auth', (req, res) => {
   if ((req.body.pin || '').trim() === HOST_PIN) {
     res.setHeader('Set-Cookie', `host_auth=${HOST_TOKEN}; Path=/; SameSite=Strict`);
-    return res.redirect('/host');
+    return res.redirect('host');
   }
-  res.redirect('/host-pin?error=1');
+  res.redirect('host?error=1');
 });
 
 // ── Library (persists via repository) ────────────────────────────────────────
