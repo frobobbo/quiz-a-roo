@@ -188,14 +188,14 @@ jobs:
           fi
           echo "::add-mask::$POSTGRES_PASSWORD"
 
-      - name: Ensure namespace and GHCR image pull secret
+      - name: Ensure GHCR image pull secret
         env:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "::add-mask::$GHCR_TOKEN"
-          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          echo "Using existing namespace: $NAMESPACE"
           kubectl create secret docker-registry ghcr-secret \
             --namespace "$NAMESPACE" \
             --docker-server=ghcr.io \
@@ -222,7 +222,6 @@ jobs:
           HELM_ARGS=(
             upgrade --install "$RELEASE_NAME" "$CHART_PATH"
             --namespace "$NAMESPACE"
-            --create-namespace
             --set image.repository="$IMAGE_REPOSITORY"
             --set image.tag="$IMAGE_TAG"
             --set database.enabled=true
