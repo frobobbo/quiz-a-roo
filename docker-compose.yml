@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: quizaroo
+      POSTGRES_USER: quizaroo
+      POSTGRES_PASSWORD: quizaroo_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quizaroo -d quizaroo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://quizaroo:quizaroo_dev@postgres:5432/quizaroo
+    ports:
+      - "3000:3000"
+    command: sh -c "npm run db:migrate && npm start"
+
+volumes:
+  postgres-data:

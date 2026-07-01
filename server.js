@@ -9,6 +9,10 @@ const QRCode = require('qrcode');
 const { defaultQuestions } = require('./questions');
 const Anthropic = require('@anthropic-ai/sdk');
 
+const settingsRepo = require('./db/repositories/settingsRepo');
+const libraryRepo = require('./db/repositories/libraryRepo');
+const historyRepo = require('./db/repositories/historyRepo');
+
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 
 function dataPath(...parts) {
@@ -36,42 +40,22 @@ let anthropic = apiKey ? new Anthropic({ apiKey, httpAgent: new https.Agent({ re
 let elevenLabsKey = config.ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY || '';
 
 const PORT = process.env.PORT || 3000;
-const LIBRARY_FILE = dataPath('library.json');
-const LIBRARIES_DIR = dataPath('libraries');
-const HISTORY_FILE = dataPath('history.json');
-const APP_SETTINGS_FILE = dataPath('app-settings.json');
 
 // ── History ───────────────────────────────────────────────────────────────────
 
-function loadHistory() {
-  try {
-    if (fs.existsSync(HISTORY_FILE)) return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-  } catch (e) { console.error('Failed to load history.json:', e.message); }
-  return [];
-}
-
 function saveHistory() {
-  try { fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2)); }
-  catch (e) { console.error('Failed to save history.json:', e.message); }
+  historyRepo.saveHistoryFile(history).catch(e => console.error('saveHistory error:', e));
 }
 
-let history = loadHistory();
+let history = [];
 
 // ── App settings (persistent defaults) ───────────────────────────────────────
 
-function loadAppSettings() {
-  try {
-    if (fs.existsSync(APP_SETTINGS_FILE)) return JSON.parse(fs.readFileSync(APP_SETTINGS_FILE, 'utf8'));
-  } catch (e) { console.warn('Could not read app-settings.json:', e.message); }
-  return { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
-}
-
 function saveAppSettings() {
-  try { fs.writeFileSync(APP_SETTINGS_FILE, JSON.stringify(appSettings, null, 2)); }
-  catch (e) { console.error('Failed to save app-settings.json:', e.message); }
+  settingsRepo.saveAppSettings(appSettings).catch(e => console.error('saveAppSettings error:', e));
 }
 
-let appSettings = loadAppSettings();
+let appSettings = { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
 
 function recordGameResult() {
   const isTeamGame = game.settings.teamMode && game.teams.length > 0;
@@ -93,9 +77,14 @@ function recordGameResult() {
     teams: game.teams.map(t => ({ name: t.name, score: t.score })),
     categoriesPlayed: [...game.categories, ...game.round2Categories].map(c => c.name),
   };
+  // Update in-memory history immediately for the current session.
   history.unshift(entry);
   if (history.length > 50) history = history.slice(0, 50);
-  saveHistory();
+  // Persist asynchronously (DB: inserts one row; file: rewrites the array).
+  historyRepo.appendHistory(entry).then(refreshed => {
+    if (refreshed !== null) history = refreshed;
+    else saveHistory();
+  }).catch(e => console.error('recordGameResult persist error:', e));
 
   // Mark each played category in the library so it can be flagged and excluded from future randomization
   const playedIds = new Set([...game.categories, ...game.round2Categories].map(c => c.id).filter(Boolean));
@@ -242,7 +231,7 @@ app.post('/api/app-settings', requireHost, (req, res) => {
       cfg.ELEVENLABS_API_KEY = trimmed;
       elevenLabsKey = trimmed;
     }
-    try { fs.writeFileSync(dataPath('config.json'), JSON.stringify(cfg, null, 2)); }
+    try { settingsRepo.saveConfig(cfg); }
     catch (e) { return res.status(500).json({ error: 'Failed to save API key.' }); }
   }
   if (gameDefaults && typeof gameDefaults === 'object') appSettings.gameDefaults = { ...appSettings.gameDefaults, ...gameDefaults };
@@ -262,55 +251,21 @@ app.post('/host-auth', (req, res) => {
   res.redirect('/host-pin?error=1');
 });
 
-// ── Library (persists to disk) ────────────────────────────────────────────────
+// ── Library (persists via repository) ────────────────────────────────────────
+
+// In-memory cache of library names, populated in main() and kept in sync.
+let libraryNames = ['Default'];
 
 function listLibraries() {
-  try {
-    if (!fs.existsSync(LIBRARIES_DIR)) return ['Default'];
-    const names = fs.readdirSync(LIBRARIES_DIR)
-      .filter(f => f.endsWith('.json'))
-      .map(f => f.slice(0, -5))
-      .sort();
-    return names.length ? names : ['Default'];
-  } catch (e) { return ['Default']; }
-}
-
-function activeLibraryPath() {
-  const name = appSettings.activeLibrary || 'Default';
-  return path.join(LIBRARIES_DIR, name + '.json');
-}
-
-function loadLibrary() {
-  if (!fs.existsSync(LIBRARIES_DIR)) {
-    fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
-  }
-  // Migrate legacy library.json to named libraries/ on first run
-  if (!appSettings.activeLibrary && fs.existsSync(LIBRARY_FILE)) {
-    try {
-      const legacy = JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
-      fs.writeFileSync(path.join(LIBRARIES_DIR, 'Default.json'), JSON.stringify(legacy, null, 2));
-    } catch (e) { console.warn('Library migration failed:', e.message); }
-  }
-  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
-  try {
-    const libPath = activeLibraryPath();
-    if (fs.existsSync(libPath)) return JSON.parse(fs.readFileSync(libPath, 'utf8'));
-    // Fallback to legacy file
-    if (fs.existsSync(LIBRARY_FILE)) return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
-  } catch (e) { console.error('Failed to load library:', e.message); }
-  const categories = defaultQuestions.map((cat, i) => ({ ...cat, id: i }));
-  return { categories, nextId: categories.length, activeIds: categories.map(c => c.id) };
+  return libraryNames;
 }
 
 function saveLibrary() {
-  if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
-  try { fs.writeFileSync(activeLibraryPath(), JSON.stringify(lib, null, 2)); }
-  catch (e) { console.error('Failed to save library:', e.message); }
+  libraryRepo.saveLibrary(appSettings.activeLibrary || 'Default', lib)
+    .catch(e => console.error('saveLibrary error:', e));
 }
 
-let lib = loadLibrary();
-if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
-saveAppSettings(); // persist activeLibrary if it was just set during migration
+let lib = { categories: [], nextId: 0, activeIds: [], pages: [{ id: 1, name: 'Page 1' }] };
 
 function generateToken() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
@@ -1691,54 +1646,51 @@ JSON format (return exactly this structure, no extra text):
 
   // ── Library pack management ────────────────────────────────────────────────
 
-  socket.on('create-library', ({ name } = {}) => {
+  socket.on('create-library', async ({ name } = {}) => {
     const safeName = (name || '').trim().replace(/[/\\?%*:|"<>]/g, '').slice(0, 40);
     if (!safeName) return;
-    const allLibs = listLibraries();
-    if (allLibs.some(l => l.toLowerCase() === safeName.toLowerCase())) {
+    if (libraryNames.some(l => l.toLowerCase() === safeName.toLowerCase())) {
       socket.emit('game-error', 'A library with that name already exists.'); return;
     }
-    if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
     const empty = { categories: [], nextId: 0, activeIds: [], pages: [{ id: 1, name: 'Page 1' }] };
-    fs.writeFileSync(path.join(LIBRARIES_DIR, safeName + '.json'), JSON.stringify(empty, null, 2));
+    try { await libraryRepo.createLibrary(safeName, empty); } catch (e) { return; }
+    libraryNames = [...libraryNames, safeName].sort();
     broadcastLibrary();
   });
 
-  socket.on('switch-library', ({ name } = {}) => {
+  socket.on('switch-library', async ({ name } = {}) => {
     if (!name) return;
-    if (!listLibraries().includes(name)) { socket.emit('game-error', 'Library not found.'); return; }
+    if (!libraryNames.includes(name)) { socket.emit('game-error', 'Library not found.'); return; }
     saveLibrary();
     appSettings.activeLibrary = name;
     saveAppSettings();
-    lib = loadLibrary();
+    lib = await libraryRepo.loadLibrary(name);
     if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
     broadcastLibrary();
   });
 
-  socket.on('delete-library', ({ name } = {}) => {
-    const allLibs = listLibraries();
-    if (!allLibs.includes(name)) return;
-    if (allLibs.length <= 1) { socket.emit('game-error', 'Cannot delete the only library.'); return; }
-    try { fs.unlinkSync(path.join(LIBRARIES_DIR, name + '.json')); } catch (e) { return; }
+  socket.on('delete-library', async ({ name } = {}) => {
+    if (!libraryNames.includes(name)) return;
+    if (libraryNames.length <= 1) { socket.emit('game-error', 'Cannot delete the only library.'); return; }
+    try { await libraryRepo.deleteLibrary(name); } catch (e) { return; }
+    libraryNames = libraryNames.filter(l => l !== name);
     if (appSettings.activeLibrary === name) {
-      appSettings.activeLibrary = allLibs.find(l => l !== name) || 'Default';
+      appSettings.activeLibrary = libraryNames[0] || 'Default';
       saveAppSettings();
-      lib = loadLibrary();
+      lib = await libraryRepo.loadLibrary(appSettings.activeLibrary);
       if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
     }
     broadcastLibrary();
   });
 
-  socket.on('rename-library', ({ oldName, newName } = {}) => {
+  socket.on('rename-library', async ({ oldName, newName } = {}) => {
     const safeName = (newName || '').trim().replace(/[/\\?%*:|"<>]/g, '').slice(0, 40);
-    const allLibs = listLibraries();
-    if (!safeName || !allLibs.includes(oldName)) return;
-    if (allLibs.some(l => l.toLowerCase() === safeName.toLowerCase() && l !== oldName)) {
+    if (!safeName || !libraryNames.includes(oldName)) return;
+    if (libraryNames.some(l => l.toLowerCase() === safeName.toLowerCase() && l !== oldName)) {
       socket.emit('game-error', 'A library with that name already exists.'); return;
     }
-    try {
-      fs.renameSync(path.join(LIBRARIES_DIR, oldName + '.json'), path.join(LIBRARIES_DIR, safeName + '.json'));
-    } catch (e) { return; }
+    try { await libraryRepo.renameLibrary(oldName, safeName); } catch (e) { return; }
+    libraryNames = libraryNames.map(l => l === oldName ? safeName : l).sort();
     if (appSettings.activeLibrary === oldName) {
       appSettings.activeLibrary = safeName;
       saveAppSettings();
@@ -1921,7 +1873,7 @@ JSON format (return exactly this structure, no extra text):
   socket.on('clear-history', () => {
     if (!io.sockets.adapter.rooms.get('host')?.has(socket.id)) return;
     history = [];
-    saveHistory();
+    historyRepo.clearHistory().catch(e => console.error('clearHistory error:', e));
     socket.emit('history-data', history);
   });
 
@@ -1935,13 +1887,34 @@ JSON format (return exactly this structure, no extra text):
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-server.listen(PORT, '0.0.0.0', async () => {
-  await buildQR();
-  const ip = getLocalIP();
-  console.log('\n  TRIVIA NIGHT SERVER');
-  console.log('  ─────────────────────────────────────────');
-  console.log(`  Board  (TV):    http://${ip}:${PORT}/board`);
-  console.log(`  Host:           http://${ip}:${PORT}/host  (PIN: ${HOST_PIN})`);
-  console.log(`  Player (phone): http://${ip}:${PORT}/player`);
-  console.log('  ─────────────────────────────────────────\n');
-});
+async function main() {
+  // Load persistent state asynchronously before accepting connections.
+  appSettings = await settingsRepo.loadAppSettings({ gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null });
+
+  history = await historyRepo.loadHistory();
+
+  // initializeLibraries must run before we default activeLibrary so that the
+  // legacy library.json → libraries/Default.json migration condition fires correctly.
+  await libraryRepo.initializeLibraries(appSettings);
+  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
+  libraryNames = await libraryRepo.listLibraries();
+
+  lib = await libraryRepo.loadLibrary(appSettings.activeLibrary);
+  if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+
+  // Persist any settings mutations that happened during initialization.
+  await settingsRepo.saveAppSettings(appSettings).catch(() => {});
+
+  server.listen(PORT, '0.0.0.0', async () => {
+    await buildQR();
+    const ip = getLocalIP();
+    console.log('\n  TRIVIA NIGHT SERVER');
+    console.log('  ─────────────────────────────────────────');
+    console.log(`  Board  (TV):    http://${ip}:${PORT}/board`);
+    console.log(`  Host:           http://${ip}:${PORT}/host  (PIN: ${HOST_PIN})`);
+    console.log(`  Player (phone): http://${ip}:${PORT}/player`);
+    console.log('  ─────────────────────────────────────────\n');
+  });
+}
+
+main().catch(e => { console.error('Fatal startup error:', e); process.exit(1); });

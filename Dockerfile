@@ -13,6 +13,7 @@ RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app && mkdir -p /data &
 COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=app:app package*.json ./
 COPY --chown=app:app server.js questions.js library.json ./
+COPY --chown=app:app db ./db
 COPY --chown=app:app public ./public
 USER app
 EXPOSE 3000
