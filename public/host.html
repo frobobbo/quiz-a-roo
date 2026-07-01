@@ -507,15 +507,16 @@
   <div class="left">
     <div class="panel-body" style="flex:1;overflow-y:auto">
 
-      <!-- QR + PIN (lobby only) -->
+      <!-- QR + Game Code (lobby only) -->
       <div class="section" id="url-section">
         <div class="section-title">Scan to Join</div>
         <div style="text-align:center">
           <img id="qr-img" src="" alt="QR" style="display:none;width:150px;height:150px;border-radius:6px">
         </div>
         <div style="margin-top:14px;text-align:center">
-          <div class="section-title" style="margin-bottom:4px">Host PIN</div>
-          <div id="host-pin-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
+          <div class="section-title" style="margin-bottom:4px">Game Code</div>
+          <div id="game-code-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
+          <div id="join-url-display" style="margin-top:8px;font-size:11px;line-height:1.35;color:rgba(255,255,255,.42);word-break:break-all"></div>
         </div>
       </div>
 
@@ -1087,11 +1088,16 @@
   // ── Connect ───────────────────────────────────────────────────────────────
 
   socket.on('connect', () => socket.emit('join-host'));
+  socket.on('host-auth-error', msg => {
+    alert(msg || 'Host access requires login.');
+    window.location.href = '/login?next=host';
+  });
 
-  socket.on('player-url', ({ qr, pin }) => {
+  socket.on('player-url', ({ qr, url, code }) => {
     const img = document.getElementById('qr-img');
     if (qr) { img.src = qr; img.style.display = 'block'; } else img.style.display = 'none';
-    if (pin) document.getElementById('host-pin-display').textContent = pin;
+    if (code) document.getElementById('game-code-display').textContent = code;
+    if (url) document.getElementById('join-url-display').textContent = url;
   });
 
   let hTimerInterval = null;

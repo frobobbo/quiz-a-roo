@@ -439,6 +439,7 @@
 <div id="join-screen" class="screen centered active">
   <h1>quiz-a-roo</h1>
   <div id="join-form">
+    <input id="join-code" type="text" placeholder="Game code" maxlength="4" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:5px;text-align:center;font-family:monospace;font-weight:800">
     <input id="join-name" type="text" placeholder="Your name" maxlength="20" autocomplete="off">
     <div class="emoji-label">Pick an emoji (optional)</div>
     <div class="emoji-grid" id="emoji-grid"></div>
@@ -642,21 +643,29 @@
   let myId   = null;
   let state  = null;
   let selectedCatIndex = null; // tracks step-1 selection
+  const params = new URLSearchParams(location.search);
+  const initialCode = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  if (initialCode) document.getElementById('join-code').value = initialCode;
 
   // ── Join ──────────────────────────────────────────────────────────────────
 
   document.getElementById('join-btn').addEventListener('click', doJoin);
   document.getElementById('join-name').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+  document.getElementById('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+  document.getElementById('join-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); });
 
   function doJoin() {
     const name = document.getElementById('join-name').value.trim();
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    if (code.length !== 4) { document.getElementById('join-error').textContent = 'Enter the 4-character game code.'; return; }
     if (!name) { document.getElementById('join-error').textContent = 'Enter a name.'; return; }
-    socket.emit('join-player', { name, emoji: selectedEmoji });
+    socket.emit('join-player', { name, emoji: selectedEmoji, code });
   }
 
   socket.on('connect', () => {
     const token = localStorage.getItem('trivia_token');
-    if (token) socket.emit('rejoin-player', { token });
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    if (token && code.length === 4) socket.emit('rejoin-player', { token, code });
   });
 
   socket.on('join-error', msg => { document.getElementById('join-error').textContent = msg; });

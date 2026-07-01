@@ -515,6 +515,7 @@
   <div class="join-box">
     <div class="qr-wrap"><img id="qr-img" src="" alt="QR Code"></div>
     <div class="label">Scan to join on your phone</div>
+    <div class="label" style="margin-top:12px;font-size:clamp(18px,2.6vw,34px);color:var(--gold);letter-spacing:4px">Game Code: <span id="board-game-code">----</span></div>
   </div>
   <div id="lobby-players"></div>
   <div class="waiting-msg" id="lobby-msg">Waiting for players to join…</div>
@@ -605,8 +606,10 @@
     else if (cue === 'wrong') playWrong();
   });
 
-  socket.on('player-url', ({ qr }) => {
+  socket.on('player-url', ({ qr, code }) => {
     const img = document.getElementById('qr-img');
+    const codeEl = document.getElementById('board-game-code');
+    if (codeEl && code) codeEl.textContent = code;
     if (qr) { img.src = qr; img.style.display = 'block'; }
     else img.style.display = 'none';
   });

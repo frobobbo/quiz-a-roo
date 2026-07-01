@@ -54,7 +54,8 @@
     document.getElementById('login-copy').textContent = 'Choose a username and password to register your own board, categories, history, and settings.';
   }
   if (params.get('error') === 'missing') err.textContent = 'Enter a username and password.';
-  if (params.get('error') === 'invalid') err.textContent = 'That username exists, but the password was incorrect.';
+  if (params.get('error') === 'invalid') err.textContent = 'That username exists, but the password was incorrect or the account is disabled.';
+  if (params.get('error') === 'registration') err.textContent = 'New host registration is currently disabled by the Site Admin.';
 </script>
 </body>
 </html>

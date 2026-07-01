@@ -16,11 +16,12 @@ The server runs on **port 3000**.
 | URL | Device | Purpose |
 |-----|--------|---------|
 | `/board` | TV / projector | Game board display |
-| `/host` | Host laptop | Game control panel (PIN: `2653`) |
-| `/player` | Player phones | Buzz in + wager |
+| `/admin` | Site Admin | Global settings and user registration management |
+| `/host` | Host laptop | Game control panel |
+| `/player?code=ABCD` | Player phones | Join the correct host game, buzz in, and wager |
 | `/settings` | Host laptop | API keys, game defaults, appearance |
 
-Players scan a QR code on the board screen to join.
+Players scan a QR code on the host screen to join. The QR URL includes the active game's unique four-character game code.
 
 ## Configuration
 
@@ -34,7 +35,14 @@ Get an Anthropic API key at [console.anthropic.com](https://console.anthropic.co
 
 ## User login
 
-Hosts must sign in at `/login` before opening `/host`. Entering a new username creates that user; using an existing username requires the original password. The existing host PIN (`2653`) remains as a second gate for the host panel.
+Users must sign in at `/login` before opening role-protected screens. Entering a new username registers a new user when Site Admins have registration enabled; using an existing username requires the original password.
+
+There are two user roles:
+
+- **Site Admin** — can access `/admin`, manage global site settings, enable/disable registration, and manage user roles/statuses. Site Admins can also host games.
+- **Host** — can access `/host` and `/settings` to create/manage games, libraries, and host settings.
+
+The old shared access PIN has been removed. Each live host game gets an automatically generated four-character alphanumeric code. Players enter that code, or scan the QR code that includes it, so they join the correct active game.
 
 Each user gets isolated persisted data:
 

@@ -13,6 +13,7 @@ const settingsRepo = require('./db/repositories/settingsRepo');
 const libraryRepo = require('./db/repositories/libraryRepo');
 const historyRepo = require('./db/repositories/historyRepo');
 const userRepo = require('./db/repositories/userRepo');
+const siteRepo = require('./db/repositories/siteRepo');
 
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 
@@ -96,9 +97,8 @@ function recordGameResult() {
   if (libChanged) { saveLibrary(); broadcastLibrary(); }
 }
 
-// ── Host PIN auth ─────────────────────────────────────────────────────────────
-const HOST_PIN   = '2653';
-const HOST_TOKEN = crypto.randomBytes(16).toString('hex');
+// ── Site settings / roles ─────────────────────────────────────────────────────
+let siteSettings = { ...siteRepo.DEFAULT_SITE_SETTINGS };
 
 const app = express();
 const server = http.createServer(app);
@@ -108,6 +108,9 @@ app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {
     res.setHeader('Cache-Control', 'no-store');
   }
+  if (req.path === '/admin.html') return res.redirect('/admin');
+  if (req.path === '/host.html') return res.redirect('/host');
+  if (req.path === '/settings.html') return res.redirect('/settings');
   next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
@@ -136,11 +139,41 @@ async function getCurrentUser(req) {
   try {
     const session = await userRepo.getSession(token);
     if (!session) return null;
-    return { id: session.userId, token };
+    const user = await userRepo.getUserById(session.userId);
+    if (!user || user.active === false) return null;
+    return { ...user, token };
   } catch {
     return null;
   }
 }
+
+function requireRole(roles) {
+  const allowed = Array.isArray(roles) ? roles : [roles];
+  return (req, res, next) => {
+    getCurrentUser(req).then(async user => {
+      if (!user || !allowed.includes(user.role)) return res.status(403).json({ error: 'Forbidden' });
+      if (user.id !== activeUserId && (user.role === 'host' || user.role === 'site_admin')) await loadUserState(user.id);
+      req.user = user;
+      next();
+    }).catch(() => res.status(403).json({ error: 'Forbidden' }));
+  };
+}
+
+async function getSocketUser(socket) {
+  const user = await getCurrentUser({ headers: socket.request.headers || {} });
+  if (!user || !['host', 'site_admin'].includes(user.role)) return null;
+  if (user.id !== activeUserId) await loadUserState(user.id);
+  return user;
+}
+
+io.use(async (socket, next) => {
+  try {
+    socket.data.user = await getSocketUser(socket);
+  } catch {
+    socket.data.user = null;
+  }
+  next();
+});
 
 // Active user id for process-global state (last logged-in host user).
 let activeUserId = 1;
@@ -166,13 +199,16 @@ app.post('/login', async (req, res) => {
   if (!username || !password) return res.redirect('login?error=missing');
   let user;
   try {
+    const exists = await userRepo.userExists(username);
+    if (!exists && siteSettings.registrationEnabled === false) return res.redirect('login?error=registration');
     user = await userRepo.getOrCreateUser(username, password);
   } catch {
     return res.redirect('login?error=invalid');
   }
   const token = await userRepo.createSession(user.id);
   await loadUserState(user.id);
-  const next = (req.query.next === 'host') ? 'host' : 'host';
+  const requested = req.query.next;
+  const next = (requested === 'admin' && user.role === 'site_admin') ? 'admin' : (user.role === 'site_admin' ? 'admin' : 'host');
   res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
   res.redirect(next);
 });
@@ -182,7 +218,6 @@ app.get('/logout', async (req, res) => {
   if (cookies.auth_token) await userRepo.deleteSession(cookies.auth_token).catch(() => {});
   res.setHeader('Set-Cookie', [
     'auth_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
-    'host_auth=; Path=/; SameSite=Strict; Max-Age=0',
   ]);
   res.redirect('login');
 });
@@ -192,7 +227,6 @@ app.post('/logout', async (req, res) => {
   if (cookies.auth_token) await userRepo.deleteSession(cookies.auth_token).catch(() => {});
   res.setHeader('Set-Cookie', [
     'auth_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
-    'host_auth=; Path=/; SameSite=Strict; Max-Age=0',
   ]);
   res.redirect('login');
 });
@@ -203,22 +237,40 @@ app.get('/player', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pl
 app.get('/host', async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.redirect('login?next=host');
+  if (!['host', 'site_admin'].includes(user.role)) return res.status(403).send('Forbidden');
   if (user.id !== activeUserId) await loadUserState(user.id);
-  const cookies = parseCookies(req);
-  if (cookies.host_auth === HOST_TOKEN) return res.sendFile(path.join(__dirname, 'public', 'host.html'));
-  res.sendFile(path.join(__dirname, 'public', 'host-pin.html'));
+  res.sendFile(path.join(__dirname, 'public', 'host.html'));
 });
 
-function requireHost(req, res, next) {
-  getCurrentUser(req).then(async user => {
-    if (!user) return res.status(403).json({ error: 'Forbidden' });
-    const cookies = parseCookies(req);
-    if (cookies.host_auth !== HOST_TOKEN) return res.status(403).json({ error: 'Forbidden' });
-    if (user.id !== activeUserId) await loadUserState(user.id);
-    req.user = user;
-    next();
-  }).catch(() => res.status(403).json({ error: 'Forbidden' }));
-}
+app.get('/admin', async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) return res.redirect('login?next=admin');
+  if (user.role !== 'site_admin') return res.status(403).send('Forbidden');
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+const requireHost = requireRole(['host', 'site_admin']);
+const requireSiteAdmin = requireRole('site_admin');
+
+app.get('/api/admin/site-settings', requireSiteAdmin, (req, res) => res.json(siteSettings));
+
+app.post('/api/admin/site-settings', requireSiteAdmin, async (req, res) => {
+  siteSettings = await siteRepo.saveSiteSettings({ ...siteSettings, ...req.body });
+  res.json(siteSettings);
+});
+
+app.get('/api/admin/users', requireSiteAdmin, async (req, res) => {
+  res.json({ users: await userRepo.listUsers() });
+});
+
+app.post('/api/admin/users/:id', requireSiteAdmin, async (req, res) => {
+  const targetId = Number(req.params.id);
+  if (!Number.isFinite(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+  if (targetId === req.user.id && req.body.active === false) return res.status(400).json({ error: 'You cannot disable your own admin account.' });
+  const updated = await userRepo.updateUser(targetId, { role: req.body.role, active: req.body.active });
+  if (!updated) return res.status(404).json({ error: 'User not found' });
+  res.json(updated);
+});
 
 app.get('/api/history', requireHost, (req, res) => res.json(history));
 
@@ -332,14 +384,6 @@ app.post('/api/app-settings', requireHost, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/host-auth', (req, res) => {
-  if ((req.body.pin || '').trim() === HOST_PIN) {
-    res.setHeader('Set-Cookie', `host_auth=${HOST_TOKEN}; Path=/; SameSite=Strict`);
-    return res.redirect('host');
-  }
-  res.redirect('host?error=1');
-});
-
 // ── Library (persists via repository) ────────────────────────────────────────
 
 // In-memory cache of library names, populated in main() and kept in sync.
@@ -372,12 +416,23 @@ function broadcastLibrary() {
 
 // ── Game state ────────────────────────────────────────────────────────────────
 
+const GAME_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateGameCode() {
+  let out = '';
+  for (let i = 0; i < 4; i++) out += GAME_CODE_ALPHABET[crypto.randomInt(GAME_CODE_ALPHABET.length)];
+  return out;
+}
+function normalizeGameCode(code) {
+  return String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+}
+
 const VALID_THEMES = ['classic','midnight','retro','forest','crimson','ocean','violet'];
 
 function freshState() {
   const d = appSettings.gameDefaults || {};
   return {
     phase: 'lobby',
+    code: generateGameCode(),
     theme: appSettings.defaultTheme || 'classic',
     round: 1,
     players: [],
@@ -532,22 +587,32 @@ function getLocalIP() {
   return 'localhost';
 }
 
-function playerUrl() { return `http://${getLocalIP()}:${PORT}/player`; }
+function baseUrlFromHeaders(headers = {}) {
+  if (siteSettings.publicBaseUrl) return siteSettings.publicBaseUrl.replace(/\/+$/, '');
+  const host = String(headers['x-forwarded-host'] || headers.host || `localhost:${PORT}`).split(',')[0].trim();
+  const proto = String(headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+function playerUrl(headers = {}) { return `${baseUrlFromHeaders(headers)}/player?code=${encodeURIComponent(game.code)}`; }
 
-let qrDataUrl = null;
-async function buildQR() {
+async function playerLinkPayload(headers = {}) {
+  const url = playerUrl(headers);
+  let qr = null;
   try {
-    qrDataUrl = await QRCode.toDataURL(playerUrl(), {
+    qr = await QRCode.toDataURL(url, {
       width: 300, margin: 2,
       color: { dark: '#000080', light: '#FFD700' },
     });
   } catch (e) { console.error('QR generation failed:', e.message); }
+  return { url, qr, code: game.code };
 }
 
 function publicState() {
   const revealFinal = ['final-question', 'game-over'].includes(game.phase);
   return {
     phase: game.phase,
+    code: game.code,
+    gameCode: game.code,
     theme: game.theme,
     round: game.round,
     players: game.players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji || '', score: p.score, isCurrentTurn: p.isCurrentTurn, teamId: p.teamId || null })),
@@ -837,22 +902,55 @@ app.post('/api/tts', (req, res) => {
 
 // ── Sockets ───────────────────────────────────────────────────────────────────
 
-io.on('connection', socket => {
+const HOST_ONLY_EVENTS = new Set([
+  'add-category', 'delete-category', 'add-generated-categories', 'generate-categories',
+  'bulk-delete-categories', 'update-category-name', 'set-active', 'update-question',
+  'add-question', 'delete-question', 'bulk-delete-questions', 'toggle-question',
+  'add-generated-questions', 'generate-questions', 'randomize-game',
+  'reset-played-categories', 'deactivate-all-categories', 'reset-library', 'remove-player',
+  'set-category-round', 'set-category-page', 'add-page', 'rename-page', 'delete-page',
+  'switch-page', 'start-game', 'start-round2', 'reveal-final-question', 'judge-final',
+  'select-question', 'host-select-question', 'judge-answer', 'host-pick-dd-player',
+  'update-settings', 'toggle-game-mode', 'judge-all-play', 'finish-all-play',
+  'duplicate-category', 'import-library', 'import-csv-questions', 'create-library',
+  'switch-library', 'delete-library', 'rename-library', 'skip-question',
+  'dismiss-answer-reveal', 'undo-last-score', 'toggle-pause', 'adjust-score',
+  'adjust-team-score', 'set-score', 'set-team-score', 'set-theme', 'set-custom-theme',
+  'rematch', 'generate-category-from-source', 'reset-game', 'get-history', 'clear-history',
+]);
 
-  socket.on('join-board', () => {
-    socket.join('board');
-    socket.emit('game-state', publicState());
-    socket.emit('player-url', { url: playerUrl(), qr: qrDataUrl });
+function isHostSocket(socket) {
+  return !!socket.data.user && ['host', 'site_admin'].includes(socket.data.user.role);
+}
+
+io.on('connection', socket => {
+  socket.use((packet, next) => {
+    const eventName = packet?.[0];
+    if (HOST_ONLY_EVENTS.has(eventName) && !isHostSocket(socket)) {
+      socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.');
+      return next(new Error('Host access required'));
+    }
+    next();
   });
 
-  socket.on('join-host', () => {
+  socket.on('join-board', async () => {
+    socket.join('board');
+    socket.emit('game-state', publicState());
+    socket.emit('player-url', await playerLinkPayload(socket.request.headers));
+  });
+
+  socket.on('join-host', async () => {
+    const user = socket.data.user || await getSocketUser(socket);
+    if (!user) { socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.'); return; }
+    socket.data.user = user;
     socket.join('host');
     socket.emit('host-state', hostState());
     socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages, libraries: listLibraries(), activeLibrary: appSettings.activeLibrary || 'Default' });
-    socket.emit('player-url', { url: playerUrl(), qr: qrDataUrl, pin: HOST_PIN });
+    socket.emit('player-url', await playerLinkPayload(socket.request.headers));
   });
 
-  socket.on('join-player', ({ name, emoji }) => {
+  socket.on('join-player', ({ name, emoji, code }) => {
+    if (normalizeGameCode(code) !== game.code) { socket.emit('join-error', 'Enter the correct 4-character game code.'); return; }
     if (game.phase !== 'lobby') { socket.emit('join-error', 'Game already in progress.'); return; }
     const trimmed = (name || '').trim().slice(0, 20);
     if (!trimmed) { socket.emit('join-error', 'Name cannot be empty.'); return; }
@@ -899,7 +997,8 @@ io.on('connection', socket => {
     broadcast();
   });
 
-  socket.on('rejoin-player', ({ token }) => {
+  socket.on('rejoin-player', ({ token, code }) => {
+    if (normalizeGameCode(code) !== game.code) { socket.emit('rejoin-failed'); return; }
     const player = game.players.find(p => p.token === token);
     if (!player) { socket.emit('rejoin-failed'); return; }
     const oldId = player.id;
@@ -1977,6 +2076,7 @@ JSON format (return exactly this structure, no extra text):
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  siteSettings = await siteRepo.loadSiteSettings();
   // Load default-user persistent state asynchronously before accepting connections.
   // Actual host login switches this process-global state to the authenticated user.
   await loadUserState(1);
@@ -1984,14 +2084,16 @@ async function main() {
   // Persist any settings mutations that happened during initialization.
   await settingsRepo.saveAppSettings(appSettings, activeUserId).catch(() => {});
 
-  server.listen(PORT, '0.0.0.0', async () => {
-    await buildQR();
+  server.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIP();
+    const localBase = `http://${ip}:${PORT}`;
     console.log('\n  QUIZ-A-ROO SERVER');
     console.log('  ─────────────────────────────────────────');
-    console.log(`  Board  (TV):    http://${ip}:${PORT}/board`);
-    console.log(`  Host:           http://${ip}:${PORT}/host  (PIN: ${HOST_PIN})`);
-    console.log(`  Player (phone): http://${ip}:${PORT}/player`);
+    console.log(`  Board  (TV):    ${localBase}/board`);
+    console.log(`  Admin:          ${localBase}/admin`);
+    console.log(`  Host:           ${localBase}/host`);
+    console.log(`  Player (phone): ${localBase}/player?code=${game.code}`);
+    console.log(`  Game Code:      ${game.code}`);
     console.log('  ─────────────────────────────────────────\n');
   });
 }

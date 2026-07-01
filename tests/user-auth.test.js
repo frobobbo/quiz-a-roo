@@ -6,6 +6,10 @@ const {
   hashPassword,
   verifyPassword,
   getOrCreateUser,
+  getUserById,
+  userExists,
+  listUsers,
+  updateUser,
   createSession,
   getSession,
   deleteSession,
@@ -81,6 +85,7 @@ async function main() {
     const u = await getOrCreateUser('testuser', 'pass1');
     assert.equal(u.username, 'testuser');
     assert.ok(typeof u.id === 'number');
+    assert.equal(u.role, 'site_admin');
   });
 
   await test('authenticates same user with correct password', async () => {
@@ -96,6 +101,25 @@ async function main() {
     const a = await getOrCreateUser('alice99', 'pw');
     const b = await getOrCreateUser('bob99', 'pw');
     assert.notEqual(a.id, b.id);
+    assert.equal(a.role, 'host');
+    assert.equal(b.role, 'host');
+  });
+
+  await test('userExists detects registered users', async () => {
+    assert.equal(await userExists('alice99'), true);
+    assert.equal(await userExists('missing-user'), false);
+  });
+
+  await test('listUsers and updateUser manage role and active status', async () => {
+    const users = await listUsers();
+    const alice = users.find(u => u.username === 'alice99');
+    assert.ok(alice);
+    const updated = await updateUser(alice.id, { role: 'site_admin', active: false });
+    assert.equal(updated.role, 'site_admin');
+    assert.equal(updated.active, false);
+    const byId = await getUserById(alice.id);
+    assert.equal(byId.role, 'site_admin');
+    assert.equal(byId.active, false);
   });
 
   // --- session management (file mode) ---
@@ -134,11 +158,18 @@ async function main() {
   }
 
   const migration = readSrc('db/migrations/002_user_login.sql');
+  const roleMigration = readSrc('db/migrations/003_roles_site_settings.sql');
   const libraryRepo = readSrc('db/repositories/libraryRepo.js');
   const settingsRepo = readSrc('db/repositories/settingsRepo.js');
   const historyRepo = readSrc('db/repositories/historyRepo.js');
+  const userRepoSrc = readSrc('db/repositories/userRepo.js');
+  const siteRepoSrc = readSrc('db/repositories/siteRepo.js');
   const serverSrc = readSrc('server.js');
   const loginHtml = readSrc('public/login.html');
+  const adminHtml = readSrc('public/admin.html');
+  const hostHtml = readSrc('public/host.html');
+  const boardHtml = readSrc('public/board.html');
+  const playerHtml = readSrc('public/player.html');
 
   await test('migration creates users table', () => {
     assert.ok(/create table if not exists users/.test(migration));
@@ -150,6 +181,13 @@ async function main() {
 
   await test('migration inserts default user', () => {
     assert.ok(/insert into users.*'default'/.test(migration.replace(/\n/g, ' ')));
+  });
+
+  await test('role migration adds roles and site settings', () => {
+    assert.ok(/add column if not exists role/.test(roleMigration));
+    assert.ok(/site_admin/.test(roleMigration));
+    assert.ok(/create table if not exists site_settings/.test(roleMigration));
+    assert.ok(/registrationEnabled/.test(roleMigration));
   });
 
   await test('migration adds user_id to libraries', () => {
@@ -216,6 +254,54 @@ async function main() {
     assert.ok(/userRepo\.getSession/.test(serverSrc));
   });
 
+  await test('server exposes role-protected admin and host routes', () => {
+    assert.ok(/app\.get\('\/admin'/.test(serverSrc));
+    assert.ok(/requireRole\(\['host', 'site_admin'\]\)/.test(serverSrc));
+    assert.ok(/requireRole\('site_admin'\)/.test(serverSrc));
+    assert.ok(/app\.get\('\/api\/admin\/users'/.test(serverSrc));
+    assert.ok(/app\.post\('\/api\/admin\/site-settings'/.test(serverSrc));
+  });
+
+  await test('host pin code path is removed', () => {
+    assert.ok(!/HOST_PIN|HOST_TOKEN|host_auth|host-pin|Host PIN|2653/.test(serverSrc));
+  });
+
+  await test('server generates and validates 4-character game codes', () => {
+    assert.ok(/const GAME_CODE_ALPHABET/.test(serverSrc));
+    assert.ok(/function generateGameCode/.test(serverSrc));
+    assert.ok(/code: generateGameCode\(\)/.test(serverSrc));
+    assert.ok(/gameCode: game\.code/.test(serverSrc));
+    assert.ok(/normalizeGameCode\(code\) !== game\.code/.test(serverSrc));
+  });
+
+  await test('server guards host-only socket events', () => {
+    assert.ok(/io\.use\(async \(socket, next\)/.test(serverSrc));
+    assert.ok(/const HOST_ONLY_EVENTS = new Set/.test(serverSrc));
+    assert.ok(/function isHostSocket/.test(serverSrc));
+    assert.ok(/HOST_ONLY_EVENTS\.has\(eventName\)/.test(serverSrc));
+    assert.ok(/'set-theme'/.test(serverSrc));
+    assert.ok(/'start-game'/.test(serverSrc));
+  });
+
+  await test('QR/player URL uses host headers or public base URL', () => {
+    assert.ok(/x-forwarded-host/.test(serverSrc));
+    assert.ok(/siteSettings\.publicBaseUrl/.test(serverSrc));
+    assert.ok(/\/player\?code=/.test(serverSrc));
+  });
+
+  await test('userRepo supports roles and admin user management', () => {
+    assert.ok(/normalizeRole/.test(userRepoSrc));
+    assert.ok(/listUsers/.test(userRepoSrc));
+    assert.ok(/updateUser/.test(userRepoSrc));
+    assert.ok(/userExists/.test(userRepoSrc));
+  });
+
+  await test('siteRepo persists global site settings', () => {
+    assert.ok(/DEFAULT_SITE_SETTINGS/.test(siteRepoSrc));
+    assert.ok(/loadSiteSettings/.test(siteRepoSrc));
+    assert.ok(/saveSiteSettings/.test(siteRepoSrc));
+  });
+
   await test('server loads per-user state through scoped repos', () => {
     assert.ok(/async function loadUserState\(userId\)/.test(serverSrc));
     assert.ok(/settingsRepo\.loadAppSettings\([^\n]+userId/.test(serverSrc));
@@ -232,6 +318,29 @@ async function main() {
 
   await test('login page documents new user creation', () => {
     assert.ok(/new username creates a new board/i.test(loginHtml));
+  });
+
+  await test('admin page manages settings and users', () => {
+    assert.ok(/\/api\/admin\/site-settings/.test(adminHtml));
+    assert.ok(/\/api\/admin\/users/.test(adminHtml));
+    assert.ok(/Site Admin/.test(adminHtml));
+    assert.ok(/Host/.test(adminHtml));
+  });
+
+  await test('host page displays game code instead of legacy pin UI', () => {
+    assert.ok(/game-code-display/.test(hostHtml));
+    assert.ok(!/host-pin-display|Legacy PIN/.test(hostHtml));
+  });
+
+  await test('board page displays game code with QR', () => {
+    assert.ok(/board-game-code/.test(boardHtml));
+    assert.ok(/player-url'.*code/s.test(boardHtml));
+  });
+
+  await test('player page accepts game code and sends it when joining', () => {
+    assert.ok(/id="join-code"/.test(playerHtml));
+    assert.ok(/join-player'.*code/s.test(playerHtml));
+    assert.ok(/rejoin-player'.*code/s.test(playerHtml));
   });
 
   // --- summary ---
