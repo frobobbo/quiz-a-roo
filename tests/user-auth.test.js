@@ -297,6 +297,29 @@ async function main() {
     assert.ok(/'start-game'/.test(serverSrc));
   });
 
+  await test('library-mutating and AI socket events are all host-only', () => {
+    const setMatch = serverSrc.match(/const HOST_ONLY_EVENTS = new Set\(\[([\s\S]*?)\]\);/);
+    assert.ok(setMatch, 'HOST_ONLY_EVENTS set not found');
+    const guarded = new Set([...setMatch[1].matchAll(/'([^']+)'/g)].map(m => m[1]));
+    for (const evt of [
+      'ai-dedupe-delete', 'ai-reword-dupes', 'generate-song-category',
+      'generate-categories', 'generate-questions', 'generate-category-from-source',
+      'reset-library', 'import-library', 'delete-library', 'clear-history',
+    ]) {
+      assert.ok(guarded.has(evt), `expected '${evt}' in HOST_ONLY_EVENTS`);
+    }
+  });
+
+  await test('server periodically purges expired sessions', () => {
+    assert.ok(/userRepo\.cleanupExpiredSessions\(\)/.test(serverSrc));
+    assert.ok(/setInterval\([\s\S]{0,200}cleanupExpiredSessions/.test(serverSrc));
+  });
+
+  await test('helm deployment uses Recreate strategy with a ReadWriteOnce data volume', () => {
+    const deploymentTpl = readSrc('charts/quiz-a-roo/templates/deployment.yaml');
+    assert.ok(/type: Recreate/.test(deploymentTpl));
+  });
+
   await test('QR/player URL uses host headers or public base URL', () => {
     assert.ok(/x-forwarded-host/.test(serverSrc));
     assert.ok(/siteSettings\.publicBaseUrl/.test(serverSrc));

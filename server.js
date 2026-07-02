@@ -1044,6 +1044,7 @@ const HOST_ONLY_EVENTS = new Set([
   'dismiss-answer-reveal', 'undo-last-score', 'toggle-pause', 'adjust-score',
   'adjust-team-score', 'set-score', 'set-team-score', 'set-theme', 'set-custom-theme',
   'rematch', 'generate-category-from-source', 'reset-game', 'get-history', 'clear-history',
+  'generate-song-category', 'ai-dedupe-delete', 'ai-reword-dupes',
 ]);
 
 function isHostSocket(socket) {
@@ -2362,6 +2363,12 @@ async function main() {
 
   // Persist any settings mutations that happened during initialization.
   await settingsRepo.saveAppSettings(appSettings, activeUserId).catch(() => {});
+
+  // Purge expired login sessions on startup and hourly thereafter.
+  userRepo.cleanupExpiredSessions().catch(e => console.error('session cleanup error:', e.message));
+  setInterval(() => {
+    userRepo.cleanupExpiredSessions().catch(e => console.error('session cleanup error:', e.message));
+  }, 60 * 60 * 1000).unref();
 
   server.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIP();

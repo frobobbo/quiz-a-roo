@@ -6,6 +6,12 @@ metadata:
     {{- include "quiz-a-roo.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- if .Values.persistence.enabled }}
+  # The data volume is ReadWriteOnce; a surge pod on another node would
+  # deadlock waiting for the volume, so replace the pod instead of rolling.
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "quiz-a-roo.selectorLabels" . | nindent 6 }}
