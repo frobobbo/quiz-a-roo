@@ -178,11 +178,14 @@ async function main() {
   const userRepoSrc = readSrc('db/repositories/userRepo.js');
   const siteRepoSrc = readSrc('db/repositories/siteRepo.js');
   const serverSrc = readSrc('server.js');
+  const indexHtml = readSrc('public/index.html');
   const loginHtml = readSrc('public/login.html');
   const adminHtml = readSrc('public/admin.html');
   const hostHtml = readSrc('public/host.html');
   const boardHtml = readSrc('public/board.html');
   const playerHtml = readSrc('public/player.html');
+  const settingsHtml = readSrc('public/settings.html');
+  const webManifest = JSON.parse(readSrc('public/site.webmanifest'));
 
   await test('migration creates users table', () => {
     assert.ok(/create table if not exists users/.test(migration));
@@ -393,6 +396,27 @@ async function main() {
   await test('board page displays game code with QR', () => {
     assert.ok(/board-game-code/.test(boardHtml));
     assert.ok(/player-url'.*code/s.test(boardHtml));
+  });
+
+  await test('public pages include the favicon set and web app manifest', () => {
+    const faviconLinks = [
+      'rel="icon" type="image/svg+xml" href="/favicon.svg"',
+      'rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png"',
+      'rel="shortcut icon" href="/favicon.ico"',
+      'rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"',
+      'rel="manifest" href="/site.webmanifest"',
+    ];
+    for (const [name, html] of [
+      ['index', indexHtml], ['login', loginHtml], ['admin', adminHtml], ['host', hostHtml],
+      ['board', boardHtml], ['player', playerHtml], ['settings', settingsHtml],
+    ]) {
+      for (const link of faviconLinks) {
+        assert.ok(html.includes(link), `${name} page should include ${link}`);
+      }
+    }
+    assert.equal(webManifest.name, 'Quiz-a-Roo');
+    assert.equal(webManifest.short_name, 'Quiz-a-Roo');
+    assert.deepEqual(webManifest.icons.map(icon => icon.src), ['/web-app-manifest-192x192.png', '/web-app-manifest-512x512.png']);
   });
 
   await test('entry screens use quiz-a-roo logo artwork instead of text-only branding', () => {
