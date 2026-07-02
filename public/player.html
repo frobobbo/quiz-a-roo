@@ -163,6 +163,7 @@
     .ddp-sub { font-size: 15px; letter-spacing: 2px; color: rgba(255,255,255,.45); margin-top: 4px; }
 
     /* ── JOIN ── */
+    .brand-logo { width: min(280px, 74vw); height: auto; border-radius: 16px; box-shadow: 0 0 28px rgba(255,178,26,.24); margin-bottom: 8px; }
     #join-form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 340px; }
 
     #join-name {
@@ -478,7 +479,7 @@
 
 <!-- JOIN -->
 <div id="join-screen" class="screen centered active">
-  <h1>quiz-a-roo</h1>
+  <img class="brand-logo" src="/assets/quiz-a-roo-logo.jpg" alt="quiz-a-roo">
   <div id="join-form">
     <input id="join-code" type="text" placeholder="Game code" maxlength="4" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:5px;text-align:center;font-family:monospace;font-weight:800">
     <input id="join-name" type="text" placeholder="Your name" maxlength="20" autocomplete="off">
@@ -787,8 +788,12 @@
 
       case 'selecting':
         if (player.isCurrentTurn) {
-          renderCatScreen(player);
+          const selectedCat = Number.isInteger(selectedCatIndex) ? state.categories[selectedCatIndex] : null;
+          const canKeepValuePicker = currentScreen === 'val-screen' && selectedCat && selectedCat.questions.some(q => !q.used);
+          if (canKeepValuePicker) renderValScreen(player, selectedCatIndex);
+          else renderCatScreen(player);
         } else {
+          selectedCatIndex = null;
           setText('other-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
           setText('other-score', fmt(myScore()));
           setText('other-picker', currentTurnName());
@@ -1047,6 +1052,7 @@
     setText('val-score', fmt(myScore()));
 
     const cat = state.categories[catIndex];
+    if (!cat) { selectedCatIndex = null; renderCatScreen(player); return; }
     setText('val-cat-name', cat.name);
 
     const list = document.getElementById('val-list');
@@ -1056,8 +1062,10 @@
       const btn = document.createElement('button');
       btn.className = `val-btn${q.used ? ' used' : ''}`;
       btn.textContent = `$${q.value}`;
+      if (q.used) btn.disabled = true;
       if (!q.used) {
         btn.addEventListener('click', () => {
+          btn.disabled = true;
           socket.emit('select-question', { categoryIndex: catIndex, questionIndex: qi });
         });
       }

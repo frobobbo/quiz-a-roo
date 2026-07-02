@@ -395,10 +395,89 @@ async function main() {
     assert.ok(/player-url'.*code/s.test(boardHtml));
   });
 
+  await test('entry screens use quiz-a-roo logo artwork instead of text-only branding', () => {
+    for (const [name, html] of [['login', loginHtml], ['player', playerHtml], ['host', hostHtml], ['board', boardHtml]]) {
+      assert.ok(/src="\/assets\/quiz-a-roo-logo\.jpg"/.test(html), `${name} page should render the logo artwork`);
+    }
+    assert.ok(/class="brand-logo/.test(loginHtml));
+    assert.ok(/class="brand-logo/.test(playerHtml));
+    assert.ok(/class="host-logo/.test(hostHtml));
+    assert.ok(/class="lobby-logo/.test(boardHtml));
+  });
+
   await test('player page accepts game code and sends it when joining', () => {
     assert.ok(/id="join-code"/.test(playerHtml));
     assert.ok(/join-player'.*code/s.test(playerHtml));
     assert.ok(/rejoin-player'.*code/s.test(playerHtml));
+  });
+
+  await test('server supports multiple simultaneous games by game code', () => {
+    assert.ok(/const games = new Map\(\)/.test(serverSrc));
+    assert.ok(/function createGame\(hostUserId = null\)/.test(serverSrc));
+    assert.ok(/socket\.join\(`game:\$\{g\.code\}`\)/.test(serverSrc));
+    assert.ok(/io\.to\(`game:\$\{game\.code\}`\)\.emit\('game-state'/.test(serverSrc));
+    assert.ok(/io\.to\(`host:\$\{game\.code\}`\)\.emit\('host-state'/.test(serverSrc));
+  });
+
+  await test('server binds hosted games to the owning host user', () => {
+    assert.ok(/next\.hostUserId = hostUserId/.test(serverSrc));
+    assert.ok(/requested\.hostUserId && requested\.hostUserId !== user\.id/.test(serverSrc));
+    assert.ok(/That game code belongs to another host/.test(serverSrc));
+    assert.ok(/target = target \|\| createGame\(user\.id\)/.test(serverSrc));
+    assert.ok(/target\.hostUserId = user\.id/.test(serverSrc));
+  });
+
+  await test('board page joins by code and runs AI host intro/category presentations', () => {
+    assert.ok(/join-board', \{ code: initialCode \}/.test(boardHtml));
+    assert.ok(/id="host-presentation"/.test(boardHtml));
+    assert.ok(/Welcome to Quiz-a-roo!!/.test(boardHtml));
+    assert.ok(/announceRoundCategories/.test(boardHtml));
+    assert.ok(/ROUND \$\{state\.round \|\| 1\} CATEGORY/.test(boardHtml));
+  });
+
+  await test('board page queues ElevenLabs voice for intro and category announcements', () => {
+    assert.ok(/function enqueueTTS\(text, onStart\)/.test(boardHtml));
+    assert.ok(/enqueueTTS\(`Round \$\{state\.round \|\| 1\} categories are:/.test(boardHtml));
+    assert.ok(/enqueueTTS\('Welcome to Quiz-a-roo!!', \(\) => showHostPresentation/.test(boardHtml));
+    assert.ok(/ttsQueue = ttsQueue\.then\(\(\) => \{[\s\S]*return playTTSText\(text\);[\s\S]*\}\)/.test(boardHtml));
+  });
+
+  await test('board page syncs category card changes to spoken category names', () => {
+    assert.ok(/function enqueueTTS\(text, onStart\)/.test(boardHtml));
+    assert.ok(/if \(typeof onStart === 'function'\) onStart\(\)/.test(boardHtml));
+    assert.ok(/enqueueTTS\(name, \(\) => showHostPresentation/.test(boardHtml));
+    assert.ok(/if \(!state\?\.ttsEnabled\) \{[\s\S]*setTimeout\(\(\) => showHostPresentation/.test(boardHtml));
+    assert.ok(/if \(state\?\.ttsEnabled\) welcomeDone\.then\(announceRoundCategories\)/.test(boardHtml));
+  });
+
+  await test('host page exposes current game board link with game code', () => {
+    assert.ok(/function boardUrl/.test(serverSrc));
+    assert.ok(/\/board\?code=/.test(serverSrc));
+    assert.ok(/boardUrl: board/.test(serverSrc));
+  });
+
+  await test('host page rejoins the same game code after reconnects', () => {
+    assert.ok(/HOST_GAME_CODE_KEY/.test(hostHtml));
+    assert.ok(/localStorage\.getItem\(HOST_GAME_CODE_KEY\)/.test(hostHtml));
+    assert.ok(/join-host', \{ code: currentHostGameCode \}/.test(hostHtml));
+    assert.ok(/localStorage\.setItem\(HOST_GAME_CODE_KEY, code\)/.test(hostHtml));
+    assert.ok(/currentHostGameCode = code/.test(hostHtml));
+  });
+
+  await test('host page links directly to the current game board code', () => {
+    assert.ok(/id="board-url-link"/.test(hostHtml));
+    assert.ok(/\/board\?code=\$\{encodeURIComponent\(code\)\}/.test(hostHtml));
+    assert.ok(/Open This Game Board/.test(hostHtml));
+  });
+
+  await test('player value picker stays open and emits dollar selection', () => {
+    assert.ok(/currentScreen === 'val-screen'/.test(playerHtml));
+    assert.ok(/renderValScreen\(player, selectedCatIndex\)/.test(playerHtml));
+    assert.ok(/btn\.disabled = true/.test(playerHtml));
+    assert.ok(/select-question', \{ categoryIndex: catIndex, questionIndex: qi \}/.test(playerHtml));
+    const hostOnlyBody = (serverSrc.match(/const HOST_ONLY_EVENTS = new Set\(\[([\s\S]*?)\]\);/) || [,''])[1];
+    assert.ok(!/'select-question'/.test(hostOnlyBody), 'player select-question must not be host-only');
+    assert.ok(/socket\.on\('select-question'[\s\S]*current\.id !== socket\.id/.test(serverSrc));
   });
 
   // --- summary ---

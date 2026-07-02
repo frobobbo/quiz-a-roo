@@ -67,6 +67,9 @@
       z-index: 50;
     }
     header h1 { font-family: Impact, sans-serif; font-size: 20px; color: var(--gold); letter-spacing: 3px; flex: 1; }
+    .host-brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .host-logo { width: 150px; height: auto; border-radius: 8px; box-shadow: 0 0 14px rgba(255,178,26,.18); }
+    .host-brand-label { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,.46); text-transform: uppercase; white-space: nowrap; }
     .phase-badge { background: var(--dark); border: 1px solid var(--gold); border-radius: 20px; padding: 3px 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
 
     /* ── LAYOUT ── */
@@ -503,7 +506,7 @@
 <body>
 
 <header>
-  <h1>QUIZ-A-ROO — HOST</h1>
+  <div class="host-brand"><img class="host-logo" src="/assets/quiz-a-roo-logo.jpg" alt="quiz-a-roo"><span class="host-brand-label">HOST</span></div>
   <span class="phase-badge" id="phase-badge">LOBBY</span>
   <button id="history-btn" title="Game History" style="background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:6px;color:rgba(255,255,255,.45);padding:3px 9px;cursor:pointer;font-size:15px;line-height:1">📜</button>
   <a href="/settings" id="settings-link" title="Settings">⚙</a>
@@ -533,6 +536,7 @@
           <div class="section-title" style="margin-bottom:4px">Game Code</div>
           <div id="game-code-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
           <div id="join-url-display" style="margin-top:8px;font-size:11px;line-height:1.35;color:rgba(255,255,255,.42);word-break:break-all"></div>
+          <a id="board-url-link" class="btn btn-gray btn-sm" href="/board" target="_blank" rel="noopener" style="display:none;margin-top:10px;justify-content:center;text-decoration:none;width:100%">🖥 Open This Game Board</a>
         </div>
       </div>
 
@@ -1150,7 +1154,9 @@
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
-  socket.on('connect', () => socket.emit('join-host'));
+  const HOST_GAME_CODE_KEY = 'quiz_a_roo_host_game_code';
+  let currentHostGameCode = new URLSearchParams(location.search).get('code') || localStorage.getItem(HOST_GAME_CODE_KEY) || null;
+  socket.on('connect', () => socket.emit('join-host', { code: currentHostGameCode }));
   socket.on('host-auth-error', msg => {
     alert(msg || 'Host access requires login.');
     window.location.href = '/login?next=host';
@@ -1159,7 +1165,15 @@
   socket.on('player-url', ({ qr, url, code }) => {
     const img = document.getElementById('qr-img');
     if (qr) { img.src = qr; img.style.display = 'block'; } else img.style.display = 'none';
-    if (code) document.getElementById('game-code-display').textContent = code;
+    if (code) {
+      currentHostGameCode = code;
+      localStorage.setItem(HOST_GAME_CODE_KEY, code);
+      document.getElementById('game-code-display').textContent = code;
+      const boardUrl = `/board?code=${encodeURIComponent(code)}`;
+      const boardLink = document.getElementById('board-url-link');
+      boardLink.href = boardUrl;
+      boardLink.style.display = 'inline-flex';
+    }
     if (url) document.getElementById('join-url-display').textContent = url;
   });
 

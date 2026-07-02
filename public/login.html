@@ -16,7 +16,7 @@
       padding: 36px; width: min(420px, 92vw); text-align: center;
       box-shadow: 0 12px 48px rgba(0,0,0,.7);
     }
-    h1 { font-family: Impact, sans-serif; font-size: 24px; letter-spacing: 3px; color: #ffb21a; margin-bottom: 8px; }
+    .brand-logo { display: block; width: min(260px, 72vw); height: auto; margin: 0 auto 14px; border-radius: 14px; box-shadow: 0 0 24px rgba(255,178,26,.22); }
     .sub { font-size: 13px; color: rgba(255,255,255,.55); margin-bottom: 24px; line-height: 1.4; }
     label { display: block; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: rgba(255,255,255,.55); margin: 14px 0 6px; }
     input {
@@ -35,7 +35,7 @@
 </head>
 <body>
 <div class="card">
-  <h1 id="login-title">quiz-a-roo</h1>
+  <img class="brand-logo" src="/assets/quiz-a-roo-logo.jpg" alt="quiz-a-roo">
   <div class="sub"><span id="login-copy">Sign in to your own host board. A new username creates a new board, library, history, and settings profile.</span></div>
   <form method="POST" action="login" autocomplete="on">
     <label for="username">Username</label>
@@ -50,7 +50,6 @@
   const params = new URLSearchParams(location.search);
   const err = document.getElementById('err');
   if (params.get('mode') === 'register') {
-    document.getElementById('login-title').textContent = 'Create your quiz-a-roo';
     document.getElementById('login-copy').textContent = 'Choose a username and password to register your own board, categories, history, and settings.';
   }
   if (params.get('error') === 'missing') err.textContent = 'Enter a username and password.';

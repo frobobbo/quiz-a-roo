@@ -610,27 +610,62 @@ function freshState() {
   };
 }
 
+const games = new Map();
 let game = freshState();
-let gameTimer = null;
-let lockTimer = null;
-let gameResultSaved = false;
+game.gameTimer = null;
+game.lockTimer = null;
+game.resultSaved = false;
+games.set(game.code, game);
+
+function createGame(hostUserId = null) {
+  const next = freshState();
+  while (games.has(next.code)) next.code = generateGameCode();
+  next.hostUserId = hostUserId;
+  next.gameTimer = null;
+  next.lockTimer = null;
+  next.resultSaved = false;
+  games.set(next.code, next);
+  return next;
+}
+
+function getGame(code) {
+  const normalized = normalizeGameCode(code);
+  return normalized ? games.get(normalized) : null;
+}
+
+function socketGame(socket) {
+  return getGame(socket?.data?.gameCode) || game;
+}
+
+function setSocketGame(socket, g) {
+  socket.data.gameCode = g.code;
+  socket.join(`game:${g.code}`);
+}
+
+function withGame(g, fn) {
+  const previous = game;
+  game = g || game;
+  try { return fn(); }
+  finally { game = previous; }
+}
 
 function clearLockTimer() {
-  if (lockTimer) { clearTimeout(lockTimer); lockTimer = null; }
+  if (game.lockTimer) { clearTimeout(game.lockTimer); game.lockTimer = null; }
 }
 
 function clearGameTimer() {
-  if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
+  if (game.gameTimer) { clearTimeout(game.gameTimer); game.gameTimer = null; }
   game.timerEndsAt = null;
   game.timerType   = null;
 }
 
 function startBuzzTimer() {
   clearGameTimer();
+  const currentGame = game;
   const ms = (game.settings.buzzTime || 30) * 1000;
   game.timerType   = 'buzz';
   game.timerEndsAt = Date.now() + ms;
-  gameTimer = setTimeout(() => {
+  game.gameTimer = setTimeout(() => withGame(currentGame, () => {
     if (game.phase === 'tiebreaker' && !game.buzzedPlayerId) { advanceTurn(null); return; }
     if (game.phase === 'question' && !game.buzzedPlayerId) {
       game.timerType   = null;
@@ -638,15 +673,16 @@ function startBuzzTimer() {
       game.phase = game.settings.allPlayMode ? 'all-play-review' : 'answer-reveal';
       broadcast();
     }
-  }, ms);
+  }), ms);
 }
 
 function startFinalWagerTimer() {
   clearGameTimer();
+  const currentGame = game;
   const wagerMs = (game.settings.wagerTime || 30) * 1000;
   game.timerType   = 'final-wager';
   game.timerEndsAt = Date.now() + wagerMs;
-  gameTimer = setTimeout(() => {
+  game.gameTimer = setTimeout(() => withGame(currentGame, () => {
     if (game.phase !== 'final-wager') return;
     if (game.settings.teamMode) {
       game.teams.forEach(t => { if (game.finalWagers[t.id] === undefined) game.finalWagers[t.id] = 0; });
@@ -656,28 +692,30 @@ function startFinalWagerTimer() {
     game.phase = 'final-question';
     startFinalAnswerTimer();
     broadcast();
-  }, wagerMs);
+  }), wagerMs);
 }
 
 function startFinalAnswerTimer() {
   clearGameTimer();
+  const currentGame = game;
   game.timerType   = 'final-answer';
   game.timerEndsAt = Date.now() + 30000;
-  gameTimer = setTimeout(() => {
+  game.gameTimer = setTimeout(() => withGame(currentGame, () => {
     if (game.phase !== 'final-question') return;
     game.finalAnswersLocked = true;
     game.timerType   = null;
     game.timerEndsAt = null;
     broadcast();
-  }, 30000);
+  }), 30000);
 }
 
 function startAnswerTimer() {
   clearGameTimer();
+  const currentGame = game;
   const ms = (game.settings.answerTime || 10) * 1000;
   game.timerType   = 'answer';
   game.timerEndsAt = Date.now() + ms;
-  gameTimer = setTimeout(() => {
+  game.gameTimer = setTimeout(() => withGame(currentGame, () => {
     if (game.phase !== 'question' && game.phase !== 'tiebreaker') return;
     if (!game.buzzedPlayerId) return;
     const player = game.players.find(p => p.id === game.buzzedPlayerId);
@@ -689,7 +727,7 @@ function startAnswerTimer() {
     if (game.buzzedPlayerId) startAnswerTimer();
     else advanceTurn(null);
     broadcast();
-  }, ms);
+  }), ms);
 }
 
 function snapshotScores() {
@@ -717,10 +755,12 @@ function baseUrlFromHeaders(headers = {}) {
   const proto = String(headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
   return `${proto}://${host}`;
 }
-function playerUrl(headers = {}) { return `${baseUrlFromHeaders(headers)}/player?code=${encodeURIComponent(game.code)}`; }
+function playerUrl(headers = {}, g = game) { return `${baseUrlFromHeaders(headers)}/player?code=${encodeURIComponent(g.code)}`; }
+function boardUrl(headers = {}, g = game) { return `${baseUrlFromHeaders(headers)}/board?code=${encodeURIComponent(g.code)}`; }
 
-async function playerLinkPayload(headers = {}) {
-  const url = playerUrl(headers);
+async function playerLinkPayload(headers = {}, g = game) {
+  const url = playerUrl(headers, g);
+  const board = boardUrl(headers, g);
   let qr = null;
   try {
     qr = await QRCode.toDataURL(url, {
@@ -728,7 +768,7 @@ async function playerLinkPayload(headers = {}) {
       color: { dark: '#000080', light: '#FFD700' },
     });
   } catch (e) { console.error('QR generation failed:', e.message); }
-  return { url, qr, code: game.code };
+  return { url, boardUrl: board, qr, code: g.code };
 }
 
 function publicState() {
@@ -813,12 +853,12 @@ function hostState() {
 }
 
 function broadcast() {
-  if (game.phase === 'game-over' && !gameResultSaved) {
-    gameResultSaved = true;
+  if (game.phase === 'game-over' && !game.resultSaved) {
+    game.resultSaved = true;
     recordGameResult();
   }
-  io.emit('game-state', publicState());
-  io.to('host').emit('host-state', hostState());
+  io.to(`game:${game.code}`).emit('game-state', publicState());
+  io.to(`host:${game.code}`).emit('host-state', hostState());
 }
 
 function allUsed() {
@@ -879,12 +919,13 @@ function maybeSetGameOver() {
     game.buzzOpenAt         = Date.now() + 8000;
     game.timerEndsAt        = game.buzzOpenAt;
     game.timerType          = 'lock';
-    lockTimer = setTimeout(() => {
+    const currentGame = game;
+    game.lockTimer = setTimeout(() => withGame(currentGame, () => {
       game.buzzOpen   = true;
       game.buzzOpenAt = null;
       startBuzzTimer();
       broadcast();
-    }, 8000);
+    }), 8000);
   } else {
     game.phase = 'game-over';
   }
@@ -1037,7 +1078,7 @@ const HOST_ONLY_EVENTS = new Set([
   'reset-played-categories', 'deactivate-all-categories', 'reset-library', 'remove-player',
   'set-category-round', 'set-category-page', 'add-page', 'rename-page', 'delete-page',
   'switch-page', 'start-game', 'start-round2', 'reveal-final-question', 'judge-final',
-  'select-question', 'host-select-question', 'judge-answer', 'host-pick-dd-player',
+  'host-select-question', 'judge-answer', 'host-pick-dd-player',
   'update-settings', 'toggle-game-mode', 'judge-all-play', 'finish-all-play',
   'duplicate-category', 'import-library', 'import-csv-questions', 'create-library',
   'switch-library', 'delete-library', 'rename-library', 'skip-question',
@@ -1053,6 +1094,12 @@ function isHostSocket(socket) {
 
 io.on('connection', socket => {
   socket.use((packet, next) => {
+    const target = getGame(socket.data.gameCode);
+    if (target) game = target;
+    next();
+  });
+
+  socket.use((packet, next) => {
     const eventName = packet?.[0];
     if (HOST_ONLY_EVENTS.has(eventName) && !isHostSocket(socket)) {
       socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.');
@@ -1061,23 +1108,40 @@ io.on('connection', socket => {
     next();
   });
 
-  socket.on('join-board', async () => {
-    socket.join('board');
-    socket.emit('game-state', publicState());
-    socket.emit('player-url', await playerLinkPayload(socket.request.headers));
+  socket.on('join-board', async ({ code } = {}) => {
+    const target = getGame(code) || game;
+    setSocketGame(socket, target);
+    socket.join(`board:${target.code}`);
+    withGame(target, () => socket.emit('game-state', publicState()));
+    socket.emit('player-url', await playerLinkPayload(socket.request.headers, target));
   });
 
-  socket.on('join-host', async () => {
+  socket.on('join-host', async ({ code } = {}) => {
     const user = socket.data.user || await getSocketUser(socket);
     if (!user) { socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.'); return; }
     socket.data.user = user;
+    const requested = getGame(code || socket.handshake?.query?.code);
+    let target = requested;
+    if (requested && requested.hostUserId && requested.hostUserId !== user.id) {
+      socket.emit('game-error', 'That game code belongs to another host. Created a new game for you.');
+      target = null;
+    }
+    target = target || createGame(user.id);
+    if (!target.hostUserId) target.hostUserId = user.id;
+    setSocketGame(socket, target);
     socket.join('host');
-    socket.emit('host-state', hostState());
+    socket.join(`host:${target.code}`);
+    withGame(target, () => socket.emit('host-state', hostState()));
     socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages, libraries: listLibraries(), activeLibrary: appSettings.activeLibrary || 'Default' });
-    socket.emit('player-url', await playerLinkPayload(socket.request.headers));
+    socket.emit('player-url', await playerLinkPayload(socket.request.headers, target));
   });
 
   socket.on('join-player', ({ name, emoji, code }) => {
+    const target = getGame(code);
+    if (!target) { socket.emit('join-error', 'Enter a valid 4-character game code.'); return; }
+    setSocketGame(socket, target);
+    socket.join(`players:${target.code}`);
+    withGame(target, () => {
     if (normalizeGameCode(code) !== game.code) { socket.emit('join-error', 'Enter the correct 4-character game code.'); return; }
     if (game.phase !== 'lobby') { socket.emit('join-error', 'Game already in progress.'); return; }
     const trimmed = (name || '').trim().slice(0, 20);
@@ -1091,6 +1155,7 @@ io.on('connection', socket => {
     socket.join('players');
     socket.emit('joined', { playerId: socket.id, playerName: trimmed, token });
     broadcast();
+    });
   });
 
   socket.on('select-team', ({ teamId, teamName }) => {
@@ -1126,6 +1191,11 @@ io.on('connection', socket => {
   });
 
   socket.on('rejoin-player', ({ token, code }) => {
+    const target = getGame(code);
+    if (!target) { socket.emit('rejoin-failed'); return; }
+    setSocketGame(socket, target);
+    socket.join(`players:${target.code}`);
+    withGame(target, () => {
     if (normalizeGameCode(code) !== game.code) { socket.emit('rejoin-failed'); return; }
     const player = game.players.find(p => p.token === token);
     if (!player) { socket.emit('rejoin-failed'); return; }
@@ -1138,6 +1208,7 @@ io.on('connection', socket => {
     socket.emit('joined', { playerId: socket.id, playerName: player.name, token: player.token });
     socket.emit('game-state', publicState());
     broadcast();
+    });
   });
 
   // ── Library management ────────────────────────────────────────────────────
@@ -1668,13 +1739,14 @@ JSON format (return exactly this structure, no extra text):
       if (ttsActive) {
         game.timerType   = 'tts';
         game.timerEndsAt = null;
-        lockTimer = setTimeout(() => {
+        const currentGame = game;
+        game.lockTimer = setTimeout(() => withGame(currentGame, () => {
           if (game.phase === 'question' && game.timerType === 'tts') {
             game.timerType = null;
             startBuzzTimer();
             broadcast();
           }
-        }, 30000);
+        }), 30000);
       } else {
         startBuzzTimer();
       }
@@ -1685,7 +1757,8 @@ JSON format (return exactly this structure, no extra text):
     if (ttsActive) {
       game.timerType   = 'tts';
       game.timerEndsAt = null;
-      lockTimer = setTimeout(() => {
+      const currentGame = game;
+      game.lockTimer = setTimeout(() => withGame(currentGame, () => {
         if (game.phase === 'question' && !game.buzzOpen) {
           game.buzzOpen   = true;
           game.buzzOpenAt = null;
@@ -1693,17 +1766,18 @@ JSON format (return exactly this structure, no extra text):
           startBuzzTimer();
           broadcast();
         }
-      }, 30000);
+      }), 30000);
     } else {
       game.buzzOpenAt  = Date.now() + 8000;
       game.timerEndsAt = game.buzzOpenAt;
       game.timerType   = 'lock';
-      lockTimer = setTimeout(() => {
+      const currentGame = game;
+      game.lockTimer = setTimeout(() => withGame(currentGame, () => {
         game.buzzOpen   = true;
         game.buzzOpenAt = null;
         startBuzzTimer();
         broadcast();
-      }, 8000);
+      }), 8000);
     }
     broadcast();
   }
@@ -1777,7 +1851,7 @@ JSON format (return exactly this structure, no extra text):
     const lockId = game.settings.teamMode ? player.teamId : player.id;
     snapshotScores();
     if (correct) {
-      io.emit('sound-cue', 'correct');
+      io.to(`game:${game.code}`).emit('sound-cue', 'correct');
       game.isStealOpportunity = false;
       let effectivePoints = points;
       if (game.settings.powerUpsEnabled && game.activePowerUps[player.id]?.doubleDown) {
@@ -1788,7 +1862,7 @@ JSON format (return exactly this structure, no extra text):
       if (game.phase === 'tiebreaker') { game.phase = 'game-over'; broadcast(); return; }
       advanceTurn(player.id);
     } else {
-      io.emit('sound-cue', 'wrong');
+      io.to(`game:${game.code}`).emit('sound-cue', 'wrong');
       const shielded = game.settings.powerUpsEnabled && !!game.activePowerUps[player.id]?.shield;
       if (shielded) {
         delete game.activePowerUps[player.id].shield;
@@ -1850,14 +1924,15 @@ JSON format (return exactly this structure, no extra text):
       game.buzzOpen    = false;
       game.timerType   = 'tts';
       game.timerEndsAt = null;
-      lockTimer = setTimeout(() => {
+      const currentGame = game;
+      game.lockTimer = setTimeout(() => withGame(currentGame, () => {
         if (game.phase === 'question' && !game.buzzOpen) {
           game.buzzOpen    = true;
           game.timerType   = null;
           startAnswerTimer();
           broadcast();
         }
-      }, 30000);
+      }), 30000);
     } else {
       game.buzzOpen = true;
       startAnswerTimer();
@@ -2051,7 +2126,7 @@ JSON format (return exactly this structure, no extra text):
     if (!game.paused) {
       game.pausedTimerType      = game.timerType;
       game.pausedTimerRemaining = game.timerEndsAt ? Math.max(0, game.timerEndsAt - Date.now()) : null;
-      if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
+      if (game.gameTimer) { clearTimeout(game.gameTimer); game.gameTimer = null; }
       game.timerEndsAt = null;
       game.paused = true;
     } else {
@@ -2063,7 +2138,8 @@ JSON format (return exactly this structure, no extra text):
         game.timerEndsAt = Date.now() + ms;
         game.pausedTimerRemaining = null;
         game.pausedTimerType      = null;
-        gameTimer = setTimeout(() => {
+        const currentGame = game;
+        game.gameTimer = setTimeout(() => withGame(currentGame, () => {
           if (game.paused) return;
           if (type === 'buzz' && game.phase === 'question' && !game.buzzedPlayerId) {
             game.timerType = null; game.timerEndsAt = null;
@@ -2072,7 +2148,7 @@ JSON format (return exactly this structure, no extra text):
           } else if (type === 'answer' && (game.phase === 'question' || game.phase === 'tiebreaker') && game.buzzedPlayerId) {
             advanceTurn(null);
           }
-        }, ms);
+        }), ms);
       }
     }
     broadcast();
@@ -2140,17 +2216,24 @@ JSON format (return exactly this structure, no extra text):
   socket.on('rematch', () => {
     if (!io.sockets.adapter.rooms.get('host')?.has(socket.id)) return;
     clearLockTimer();
-    if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
+    if (game.gameTimer) { clearTimeout(game.gameTimer); game.gameTimer = null; }
     const prevTheme    = game.theme;
     const prevPlayers  = game.players.map(p => ({ ...p, score: 0, isCurrentTurn: false }));
     const prevTeams    = game.teams.map(t => ({ ...t, score: 0, isCurrentTurn: false }));
     const prevSettings = { ...game.settings };
-    game = freshState();
-    game.theme    = prevTheme;
-    game.players  = prevPlayers;
-    game.teams    = prevTeams;
-    game.settings = prevSettings;
-    gameResultSaved = false;
+    const fresh = freshState();
+    const sameCode = game.code;
+    Object.keys(game).forEach(k => delete game[k]);
+    Object.assign(game, fresh, {
+      code: sameCode,
+      theme: prevTheme,
+      players: prevPlayers,
+      teams: prevTeams,
+      settings: prevSettings,
+      gameTimer: null,
+      lockTimer: null,
+      resultSaved: false,
+    });
     broadcast();
   });
 
@@ -2326,11 +2409,18 @@ JSON format (return exactly this structure, no extra text):
 
   socket.on('reset-game', () => {
     clearLockTimer();
-    if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
+    if (game.gameTimer) { clearTimeout(game.gameTimer); game.gameTimer = null; }
     const prevTheme = game.theme;
-    game = freshState();
-    game.theme = prevTheme;
-    gameResultSaved = false;
+    const sameCode = game.code;
+    const fresh = freshState();
+    Object.keys(game).forEach(k => delete game[k]);
+    Object.assign(game, fresh, {
+      code: sameCode,
+      theme: prevTheme,
+      gameTimer: null,
+      lockTimer: null,
+      resultSaved: false,
+    });
     broadcast();
   });
 
