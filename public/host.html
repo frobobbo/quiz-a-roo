@@ -185,6 +185,14 @@
     .lib-q-q:focus, .lib-q-a:focus { border-color: #556; }
     .lib-q-a { color: var(--gold); }
     #cat-list:not(.lib-answers-shown) .lib-q-a:not(:focus) { color: transparent; text-shadow: 0 0 7px rgba(255,215,0,0.55); }
+    .lib-q-audio-row { grid-column: 1 / -1; display: none; align-items: center; gap: 6px; padding: 3px 0 1px; }
+    .lib-q-audio-row.open { display: flex; }
+    .lib-q-audio-url { flex: 1; background: var(--panel); border: 1px solid #3a5f8a; border-radius: 4px; color: #7db8ff; padding: 5px 7px; font-size: 11px; font-family: inherit; outline: none; }
+    .lib-q-audio-url:focus { border-color: #7db8ff; }
+    .lib-q-audio-url::placeholder { color: rgba(125,184,255,.35); }
+    .lib-q-audio-start { width: 58px; background: var(--panel); border: 1px solid #3a5f8a; border-radius: 4px; color: #7db8ff; padding: 5px 5px; font-size: 11px; text-align: center; outline: none; }
+    .audio-q-btn { font-size: 12px !important; opacity: 0.3; line-height: 1 !important; }
+    .audio-q-btn.active { opacity: 1; color: #7db8ff !important; }
     #cat-list:not(.lib-answers-shown) .gen-q-ans { color: transparent; text-shadow: 0 0 6px rgba(255,215,0,0.5); }
 
     .lib-add-q { width: 100%; padding: 6px; background: transparent; border: 1px dashed var(--border); border-radius: 6px; color: rgba(255,255,255,.3); font-size: 12px; cursor: pointer; transition: border-color .1s, color .1s; }
@@ -482,6 +490,14 @@
     .dupe-item .di-val { color: var(--white); }
     .dupes-empty { color: rgba(255,255,255,.35); font-style: italic; font-size: 13px; padding: 6px 0; }
     #dupes-loading { text-align: center; padding: 24px; color: rgba(255,255,255,.5); font-style: italic; font-size: 13px; }
+    .dupes-ai-bar { display: flex; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .dupes-ai-btn { flex: 1; padding: 9px 14px; border-radius: 8px; border: 1px solid #446; background: var(--dark); color: var(--white); font-size: 13px; cursor: pointer; transition: background .15s; text-align: center; }
+    .dupes-ai-btn:hover { background: rgba(255,255,255,.06); }
+    .dupes-ai-btn.danger { border-color: #8b2020; color: #ff8080; }
+    .dupes-ai-btn.danger:hover { background: rgba(139,32,32,.25); }
+    .dupes-ai-btn.ai { border-color: #3a5f8a; color: #7db8ff; }
+    .dupes-ai-btn.ai:hover { background: rgba(58,95,138,.25); }
+    #dupes-ai-status { text-align: center; padding: 8px 0; font-size: 12px; color: rgba(255,255,255,.5); font-style: italic; }
   </style>
 </head>
 <body>
@@ -873,7 +889,8 @@
 
   let genCatsCount = 3;
   let genSourceCount = 3;
-  let genCatsTab = 'random'; // 'random' | 'source'
+  let genCatsTab = 'random'; // 'random' | 'source' | 'song'
+  let genSongCount = 1;
 
   function openGenCatsModal() {
     genCatsCount = 3;
@@ -889,6 +906,7 @@
     return `<div class="gen-tabs">
       <button class="gen-tab${genCatsTab === 'random' ? ' gen-tab-active' : ''}" data-tab="random">Random / Theme</button>
       <button class="gen-tab${genCatsTab === 'source' ? ' gen-tab-active' : ''}" data-tab="source">From URL or Topic</button>
+      <button class="gen-tab${genCatsTab === 'song'   ? ' gen-tab-active' : ''}" data-tab="song">🎵 Song Category</button>
     </div>`;
   }
 
@@ -900,7 +918,49 @@
 
   function showGenCatsRequest() {
     const dlg = document.getElementById('gen-cats-dialog');
-    if (genCatsTab === 'source') {
+    if (genCatsTab === 'song') {
+      dlg.innerHTML = `
+        <h2>✨ Generate Categories</h2>
+        ${genTabsHtml()}
+        <div>
+          <div class="gen-cats-label">Song theme or artist</div>
+          <input id="gen-song-input" class="gen-source-input" type="text" placeholder="e.g. 90s pop hits, Taylor Swift, sad country songs…" maxlength="200" autocomplete="off">
+        </div>
+        <div>
+          <div class="gen-cats-label">How many categories?</div>
+          <div class="gen-cats-count-row" style="flex-wrap:wrap">
+            ${[1,2,3,4,5].map(n => `<button class="gen-cats-count-btn${n === genSongCount ? ' active' : ''}" data-n="${n}">${n}</button>`).join('')}
+          </div>
+        </div>
+        <div style="font-size:11px;color:rgba(255,255,255,.35);line-height:1.5;padding:2px 0">
+          Pulls real songs from Spotify, generates Jeopardy clues with Claude, and attaches 30-second audio previews to each question automatically.
+        </div>
+        <div class="gen-cats-footer">
+          <button id="gen-cats-cancel-btn">Cancel</button>
+          <button id="gen-cats-go-btn">🎵 Generate</button>
+        </div>
+      `;
+      wireGenTabs(dlg);
+      document.getElementById('gen-song-input').focus();
+      dlg.querySelectorAll('.gen-cats-count-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          genSongCount = +btn.dataset.n;
+          dlg.querySelectorAll('.gen-cats-count-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+      document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
+      document.getElementById('gen-cats-go-btn').addEventListener('click', () => {
+        const theme = document.getElementById('gen-song-input').value.trim();
+        if (!theme) return;
+        const plural = genSongCount === 1 ? 'category' : `${genSongCount} categories`;
+        showGenSourceLoading(`Searching Spotify and generating ${plural}…`);
+        socket.emit('generate-song-category', { theme, count: genSongCount });
+      });
+      document.getElementById('gen-song-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('gen-cats-go-btn').click();
+        if (e.key === 'Escape') closeGenCatsModal();
+      });
+    } else if (genCatsTab === 'source') {
       dlg.innerHTML = `
         <h2>✨ Generate Categories</h2>
         ${genTabsHtml()}
@@ -1009,7 +1069,7 @@
               ${(cat.questions || []).map(q => `
                 <div class="gen-cat-q-row">
                   <span class="gen-cat-q-val">$${q.value}</span>
-                  <span class="gen-cat-q-text">${esc(q.question)}</span>
+                  <span class="gen-cat-q-text">${q.audioUrl && !q.question ? '🎵 Audio clip' : esc(q.question)}</span>
                 </div>
               `).join('')}
             </div>
@@ -1057,6 +1117,9 @@
   });
 
   socket.on('gen-categories-error', ({ message }) => showGenCatsError(message));
+
+  socket.on('gen-song-result', ({ categories }) => showGenCatsResults(categories));
+  socket.on('gen-song-error',  ({ message })    => showGenCatsError(message));
 
   socket.on('gen-source-result', ({ categories }) => {
     if (!Array.isArray(categories) || categories.length === 0) {
@@ -1620,6 +1683,7 @@
   // After a new category is created, auto-expand it and optionally AI-generate
   let pendingCatId = null;
   let pendingCatAI = false;
+  let pendingAddQCatId = null;
 
   function renderPageTabsBar(pages) {
     const bar = document.getElementById('page-tabs-bar');
@@ -1672,7 +1736,8 @@
     const visibleCats = categories.filter(c => (c.page || 1) === activePage);
 
     const container = document.getElementById('cat-list');
-    const savedY    = window.scrollY;
+    const scroller  = container.closest('.right') || document.documentElement;
+    const savedY    = scroller.scrollTop;
 
     // Consume pending new-category action before building
     const newCatId = pendingCatId;
@@ -1709,7 +1774,16 @@
       }
     }
 
-    requestAnimationFrame(() => window.scrollTo(0, savedY));
+    if (pendingAddQCatId !== null) {
+      const targetId = pendingAddQCatId;
+      pendingAddQCatId = null;
+      requestAnimationFrame(() => {
+        const rows = container.querySelectorAll(`.lib-cat[data-id="${targetId}"] .lib-q-row`);
+        if (rows.length) rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(() => { scroller.scrollTop = savedY; }));
+    }
   }
 
   function buildCatCard(container, cat, isActive, num, pages = [{ id: 1, name: 'Page 1' }]) {
@@ -1837,6 +1911,7 @@
     // Add question
     card.querySelector('.add-q-btn').addEventListener('click', () => {
       openCats.add(cat.id);
+      pendingAddQCatId = cat.id;
       socket.emit('add-question', { catId: cat.id });
     });
 
@@ -1903,9 +1978,16 @@
         </div>
         <textarea class="lib-q-q" placeholder="Question / clue…" data-field="question" rows="1">${esc(q.question)}</textarea>
         <textarea class="lib-q-a" placeholder="Answer…" data-field="answer" rows="1">${esc(q.answer)}</textarea>
-        <div class="q-action-cell">
+        <div class="q-action-cell" style="flex-direction:column;gap:2px">
+          <button class="btn-icon audio-q-btn${q.audioUrl ? ' active' : ''}" title="Add/edit audio">🎵</button>
           <button class="btn-icon danger del-q-btn" title="Delete">×</button>
           <input type="checkbox" class="q-sel-check" title="Select for deletion">
+        </div>
+        <div class="lib-q-audio-row${q.audioUrl ? ' open' : ''}">
+          <span style="font-size:10px;color:rgba(255,255,255,.4);white-space:nowrap;flex-shrink:0">🎵 URL</span>
+          <input class="lib-q-audio-url" type="text" placeholder="YouTube or direct audio URL…" data-field="audioUrl" value="${esc(q.audioUrl || '')}">
+          <span style="font-size:10px;color:rgba(255,255,255,.4);white-space:nowrap;flex-shrink:0">Start (s)</span>
+          <input class="lib-q-audio-start" type="number" min="0" placeholder="0" data-field="audioStart" value="${q.audioStart > 0 ? q.audioStart : ''}">
         </div>
       </div>
     `;
@@ -1921,14 +2003,28 @@
     });
 
     // Save on blur
-    const save = () => socket.emit('update-question', {
-      catId,
-      qIdx:     qi,
-      question: row.querySelector('[data-field="question"]').value,
-      answer:   row.querySelector('[data-field="answer"]').value,
-      value:    row.querySelector('[data-field="value"]').value,
-    });
+    const save = () => {
+      const audioUrl = (row.querySelector('[data-field="audioUrl"]')?.value || '').trim();
+      const audioStart = parseInt(row.querySelector('[data-field="audioStart"]')?.value) || 0;
+      socket.emit('update-question', {
+        catId,
+        qIdx:     qi,
+        question: row.querySelector('[data-field="question"]').value,
+        answer:   row.querySelector('[data-field="answer"]').value,
+        value:    row.querySelector('[data-field="value"]').value,
+        audioUrl,
+        audioStart,
+      });
+      row.querySelector('.audio-q-btn').classList.toggle('active', !!audioUrl);
+    };
     row.querySelectorAll('input, textarea').forEach(el => el.addEventListener('blur', save));
+
+    // Audio toggle button
+    row.querySelector('.audio-q-btn').addEventListener('click', () => {
+      const audioRow = row.querySelector('.lib-q-audio-row');
+      const isOpen = audioRow.classList.toggle('open');
+      if (isOpen) row.querySelector('.lib-q-audio-url').focus();
+    });
 
     // Enable/disable toggle
     row.querySelector('.q-enable-check').addEventListener('change', () => {
@@ -2163,12 +2259,61 @@
       ${buildGroups(dq, 'question')}
       <div class="dupes-section-head">Duplicate Answers (${stats.dupeAGroups})</div>
       ${buildGroups(da, 'answer')}
+      ${(stats.dupeCatGroups + stats.dupeQGroups) > 0 ? `
+      <div class="dupes-ai-bar" id="dupes-ai-bar">
+        <button class="dupes-ai-btn danger" id="dupes-delete-btn">🗑 Delete Duplicates</button>
+        <button class="dupes-ai-btn ai" id="dupes-reword-btn">✨ AI Reword Duplicates</button>
+      </div>` : ''}
     `;
+
+    const confirmDupeAction = (type) => {
+      const bar = document.getElementById('dupes-ai-bar');
+      if (!bar) return;
+      const label = type === 'delete'
+        ? 'Delete all duplicates (keep best version)?'
+        : 'AI reword duplicates (may take ~20s)?';
+      bar.innerHTML = `
+        <span style="flex:1;font-size:12px;color:rgba(255,255,255,.6)">${label}</span>
+        <button class="dupes-ai-btn" id="dupes-confirm-yes" style="flex:0;padding:7px 18px;border-color:#5acc80;color:#5acc80">Yes</button>
+        <button class="dupes-ai-btn" id="dupes-confirm-no"  style="flex:0;padding:7px 14px">Cancel</button>
+      `;
+      document.getElementById('dupes-confirm-no').addEventListener('click', () => openDupesModal());
+      document.getElementById('dupes-confirm-yes').addEventListener('click', () => {
+        if (type === 'delete') {
+          bar.outerHTML = '<div id="dupes-ai-status">Deleting duplicates…</div>';
+          socket.emit('ai-dedupe-delete');
+        } else {
+          bar.outerHTML = '<div id="dupes-ai-status">AI is rewording duplicates…</div>';
+          socket.emit('ai-reword-dupes');
+        }
+      });
+    };
+    if ((stats.dupeCatGroups + stats.dupeQGroups) > 0) {
+      document.getElementById('dupes-delete-btn').addEventListener('click', () => confirmDupeAction('delete'));
+      document.getElementById('dupes-reword-btn').addEventListener('click',  () => confirmDupeAction('reword'));
+    }
   }
 
   document.getElementById('dupes-btn').addEventListener('click', openDupesModal);
   document.getElementById('dupes-close').addEventListener('click', () => { dupesModal.style.display = 'none'; });
   document.getElementById('dupes-backdrop').addEventListener('click', () => { dupesModal.style.display = 'none'; });
+
+  socket.on('ai-dedupe-done', data => {
+    const status = document.getElementById('dupes-ai-status');
+    if (status) {
+      if (data.type === 'delete') {
+        status.textContent = `Deleted ${data.deletedCategories} duplicate categor${data.deletedCategories !== 1 ? 'ies' : 'y'} and ${data.deletedQuestions} duplicate question${data.deletedQuestions !== 1 ? 's' : ''}. Rescanning…`;
+      } else {
+        status.textContent = `AI reworded ${data.rewordedCategories} categor${data.rewordedCategories !== 1 ? 'ies' : 'y'} and ${data.rewordedQuestions} question${data.rewordedQuestions !== 1 ? 's' : ''}. Rescanning…`;
+      }
+    }
+    setTimeout(() => { if (dupesModal.style.display === 'flex') openDupesModal(); }, 1500);
+  });
+
+  socket.on('ai-dedupe-error', ({ message }) => {
+    const status = document.getElementById('dupes-ai-status');
+    if (status) { status.textContent = 'Error: ' + message; status.style.color = '#ff8080'; }
+  });
 
   // Import library
   document.getElementById('import-lib-input').addEventListener('change', function() {

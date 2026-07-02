@@ -198,6 +198,14 @@
       color: transparent;
     }
 
+    .tile-music { font-size: 0.42em; vertical-align: super; margin-left: 3px; opacity: 0.75; }
+
+    /* ── AUDIO PLAYER ── */
+    #q-audio-player { width: min(580px, 88vw); display: none; flex-direction: column; align-items: stretch; }
+    #q-audio-player iframe { width: 100%; aspect-ratio: 16/9; border: none; border-radius: 10px; box-shadow: 0 4px 24px rgba(0,0,0,.5); }
+    #q-audio-player audio { width: 100%; border-radius: 8px; }
+    .audio-type-label { font-family: Impact, sans-serif; font-size: clamp(14px, 1.8vw, 22px); letter-spacing: 3px; color: var(--gold); text-align: center; margin-bottom: 10px; }
+
     #turn-bar {
       flex-shrink: 0;
       text-align: center;
@@ -554,6 +562,7 @@
 <!-- QUESTION OVERLAY -->
 <div id="overlay">
   <div id="q-header"></div>
+  <div id="q-audio-player"></div>
   <div id="q-text"></div>
   <div id="q-answer-reveal" style="display:none;font-family:Impact,sans-serif;font-size:clamp(22px,3.5vw,52px);color:#5acc80;letter-spacing:2px;text-align:center;max-width:900px"></div>
   <div id="tts-indicator" style="display:none;align-items:center;gap:10px;opacity:.7;font-size:clamp(13px,1.2vw,18px);letter-spacing:2px;color:var(--gold)">
@@ -755,6 +764,7 @@
       else if (state.phase === 'game-over') playGameOver();
       else if (state.phase === 'final-question' && prevPhase === 'final-wager') playFinalJeopardy();
       if (state.phase !== 'question' && state.phase !== 'tiebreaker') stopTTS();
+      if (state.phase !== 'question' && state.phase !== 'tiebreaker' && state.phase !== 'answer-reveal') stopAudio();
       prevPhase = state.phase;
     }
 
@@ -873,7 +883,7 @@
           const q = cat.questions[row];
           const el = document.createElement('div');
           el.className = `q-tile${q.used ? ' used' : ''}`;
-          el.textContent = q.used ? '' : `$${q.value}`;
+          el.innerHTML = q.used ? '' : `$${q.value}${q.audioUrl ? '<span class="tile-music">🎵</span>' : ''}`;
           grid.appendChild(el);
         });
       }
@@ -887,7 +897,7 @@
           const el = tiles[i++];
           const used = q.used;
           el.classList.toggle('used', used);
-          el.textContent = used ? '' : `$${q.value}`;
+          el.innerHTML = used ? '' : `$${q.value}${q.audioUrl ? '<span class="tile-music">🎵</span>' : ''}`;
         });
       }
     }
@@ -1007,7 +1017,19 @@
       ? `🔥 TIEBREAKER — ${q.categoryName}`
       : `${q.categoryName}  —  ${q.dailyDouble ? 'DAILY DOUBLE' : '$' + q.value}`;
     document.getElementById('q-header').textContent = header;
-    document.getElementById('q-text').textContent = q.question;
+
+    // Audio player
+    const audioPlayerEl = document.getElementById('q-audio-player');
+    const audioUrl = q.audioUrl || null;
+    if (audioUrl && audioUrl !== prevAudioUrl) {
+      prevAudioUrl = audioUrl;
+      audioPlayerEl.innerHTML = buildAudioPlayer(audioUrl, q.audioStart || 0);
+      audioPlayerEl.style.display = 'flex';
+    } else if (!audioUrl && prevAudioUrl) {
+      stopAudio();
+    }
+
+    document.getElementById('q-text').textContent = q.question || (audioUrl ? '' : '');
 
     const answerEl = document.getElementById('q-answer-reveal');
     if (isReveal && q.answer) {
@@ -1144,6 +1166,30 @@
   function fmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString(); }
   function esc(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Audio question playback ───────────────────────────────────────────────
+  let prevAudioUrl = null;
+
+  function extractYoutubeId(url) {
+    const m = (url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+
+  function buildAudioPlayer(url, start) {
+    const ytId = extractYoutubeId(url);
+    if (ytId) {
+      const s = (start && start > 0) ? `&start=${start}` : '';
+      return `<div class="audio-type-label">🎵 AUDIO CLUE</div><iframe src="https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1${s}&rel=0&modestbranding=1&iv_load_policy=3" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+    }
+    return `<div class="audio-type-label">🎵 AUDIO CLUE</div><audio autoplay controls src="${url.replace(/"/g,'%22')}"></audio>`;
+  }
+
+  function stopAudio() {
+    prevAudioUrl = null;
+    const el = document.getElementById('q-audio-player');
+    el.innerHTML = '';
+    el.style.display = 'none';
   }
 
   // ── Audio ─────────────────────────────────────────────────────────────────

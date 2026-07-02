@@ -127,6 +127,41 @@
     /* ── DAILY DOUBLE WAGER ── */
     #dd-wager-screen { justify-content: center; }
 
+    /* ── DAILY DOUBLE PHONE FLASH ── */
+    #dd-player-flash {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 600;
+      background: #060620;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      pointer-events: none;
+    }
+    #dd-player-flash.show {
+      display: flex;
+      animation: ddp-in 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both;
+    }
+    #dd-player-flash.hide {
+      display: flex;
+      animation: ddp-out 0.45s ease-in forwards;
+    }
+    @keyframes ddp-in  { from { opacity:0; transform:scale(0.82); } to { opacity:1; transform:scale(1); } }
+    @keyframes ddp-out { from { opacity:1; } to { opacity:0; } }
+    .ddp-stars { font-size: 36px; letter-spacing: 8px; }
+    .ddp-text {
+      font-family: Impact, sans-serif;
+      font-size: clamp(34px, 11vw, 58px);
+      letter-spacing: 4px;
+      color: #ffd700;
+      text-align: center;
+      text-shadow: 0 0 28px rgba(255,215,0,0.55), 0 2px 8px rgba(0,0,0,0.8);
+      line-height: 1.15;
+    }
+    .ddp-sub { font-size: 15px; letter-spacing: 2px; color: rgba(255,255,255,.45); margin-top: 4px; }
+
     /* ── JOIN ── */
     #join-form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 340px; }
 
@@ -430,6 +465,12 @@
 <body>
 
 <!-- PAUSE OVERLAY -->
+<div id="dd-player-flash">
+  <div class="ddp-stars">⭐ ⭐ ⭐</div>
+  <div class="ddp-text">DAILY<br>DOUBLE!</div>
+  <div class="ddp-sub">PLACE YOUR WAGER</div>
+</div>
+
 <div id="pause-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px">
   <div style="font-family:Impact,sans-serif;font-size:clamp(32px,8vw,56px);letter-spacing:4px;color:#fff">⏸ PAUSED</div>
   <div style="font-size:13px;opacity:.5;letter-spacing:1px">Waiting for host to resume…</div>
@@ -675,6 +716,17 @@
   // ── State ─────────────────────────────────────────────────────────────────
 
   let prevBuzzedPlayerId = null;
+  let prevDDCount = 0;
+
+  function showDDFlash() {
+    const el = document.getElementById('dd-player-flash');
+    el.classList.remove('hide');
+    el.classList.add('show');
+    setTimeout(() => {
+      el.classList.replace('show', 'hide');
+      el.addEventListener('animationend', () => el.classList.remove('hide'), { once: true });
+    }, 2000);
+  }
 
   socket.on('game-state', newState => {
     state = newState;
@@ -683,6 +735,10 @@
       playBuzzConfirm();
     }
     prevBuzzedPlayerId = newState.buzzedPlayerId;
+    if (newState.dailyDoubleCount !== prevDDCount) {
+      prevDDCount = newState.dailyDoubleCount;
+      if (myId) showDDFlash();
+    }
     const pauseEl = document.getElementById('pause-overlay');
     pauseEl.style.display = newState.paused ? 'flex' : 'none';
     render();

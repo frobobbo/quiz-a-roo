@@ -185,6 +185,31 @@
         <a href="https://elevenlabs.io" target="_blank" style="color:var(--gold)">elevenlabs.io</a>.
         Free tier included.
       </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+
+      <div class="api-status">
+        <div class="api-dot missing" id="spotify-dot"></div>
+        <span id="spotify-status-text">Checking…</span>
+        <span class="api-preview" id="spotify-preview"></span>
+      </div>
+      <div>
+        <div class="setting-label" style="margin-bottom:8px">Spotify Client ID <span style="color:rgba(255,255,255,.25);font-size:10px">(for song categories)</span></div>
+        <div class="input-row">
+          <input type="text" id="spotify-id-input" placeholder="Client ID" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="setting-label" style="margin-bottom:8px;margin-top:10px">Spotify Client Secret</div>
+        <div class="input-row">
+          <input type="password" id="spotify-secret-input" placeholder="Client Secret" autocomplete="off" spellcheck="false">
+          <button class="btn-save" id="spotify-save">Save</button>
+        </div>
+        <div class="save-feedback" id="spotify-feedback" style="margin-top:8px"></div>
+      </div>
+      <div style="font-size:12px;color:rgba(255,255,255,.35);line-height:1.6">
+        Required for AI song categories with Spotify previews. Create a free app at
+        <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:var(--gold)">developer.spotify.com</a>
+        and copy the Client ID and Client Secret.
+      </div>
     </div>
   </div>
 
@@ -568,6 +593,27 @@
   });
 
   // ElevenLabs key save
+  document.getElementById('spotify-save').addEventListener('click', async () => {
+    const clientId  = document.getElementById('spotify-id-input').value.trim();
+    const clientSec = document.getElementById('spotify-secret-input').value.trim();
+    const btn = document.getElementById('spotify-save');
+    btn.disabled = true;
+    const res = await fetch('/api/app-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spotifyClientId: clientId, spotifyClientSecret: clientSec }),
+    });
+    btn.disabled = false;
+    if (res.ok) {
+      document.getElementById('spotify-id-input').value = '';
+      document.getElementById('spotify-secret-input').value = '';
+      showFeedback('spotify-feedback', 'Spotify credentials saved.', 'ok');
+      document.getElementById('spotify-dot').className = 'api-dot ok';
+      document.getElementById('spotify-status-text').textContent = 'Configured';
+    } else {
+      showFeedback('spotify-feedback', 'Failed to save.', 'err');
+    }
+  });
+
   document.getElementById('el-key-save').addEventListener('click', async () => {
     const key = document.getElementById('el-key-input').value.trim();
     const btn = document.getElementById('el-key-save');
@@ -696,6 +742,11 @@
     document.getElementById('el-dot').className = 'api-dot ' + (s.elKeyConfigured ? 'ok' : 'missing');
     document.getElementById('el-status-text').textContent = s.elKeyConfigured ? 'Configured' : 'Not configured';
     if (s.elKeyPreview) document.getElementById('el-preview').textContent = s.elKeyPreview;
+
+    // Spotify status
+    document.getElementById('spotify-dot').className = 'api-dot ' + (s.spotifyConfigured ? 'ok' : 'missing');
+    document.getElementById('spotify-status-text').textContent = s.spotifyConfigured ? 'Configured' : 'Not configured';
+    if (s.spotifyIdPreview) document.getElementById('spotify-preview').textContent = s.spotifyIdPreview;
 
     // Game defaults
     const d = s.gameDefaults || {};
