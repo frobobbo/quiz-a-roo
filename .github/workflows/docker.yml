@@ -68,6 +68,7 @@ jobs:
       RELEASE_NAME: quiz-a-roo
       NAMESPACE: quiz-a-roo
       IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+      POSTGRES_PASSWORD: ${{ secrets.QUIZ_A_ROO_POSTGRES_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -98,6 +99,12 @@ jobs:
           # by checking only the app namespace.
           kubectl auth can-i get deployments -n "$NAMESPACE"
           kubectl auth can-i patch deployments -n "$NAMESPACE"
+          kubectl auth can-i get statefulsets -n "$NAMESPACE"
+          kubectl auth can-i create statefulsets -n "$NAMESPACE"
+          kubectl auth can-i patch statefulsets -n "$NAMESPACE"
+          kubectl auth can-i get persistentvolumeclaims -n "$NAMESPACE"
+          kubectl auth can-i create persistentvolumeclaims -n "$NAMESPACE"
+          kubectl auth can-i patch persistentvolumeclaims -n "$NAMESPACE"
           kubectl auth can-i get secrets -n "$NAMESPACE"
           kubectl auth can-i create secrets -n "$NAMESPACE"
           kubectl auth can-i patch secrets -n "$NAMESPACE"
@@ -127,6 +134,11 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
           IMAGE_TAG="sha-${SHORT_SHA}"
           DATA_PVC="${RELEASE_NAME}-data"
+          if [ -z "$POSTGRES_PASSWORD" ]; then
+            echo "Missing required repository secret: QUIZ_A_ROO_POSTGRES_PASSWORD" >&2
+            exit 1
+          fi
+          echo "::add-mask::$POSTGRES_PASSWORD"
 
           if helm status "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
             REUSE_ARGS=(--reuse-values)
@@ -146,6 +158,9 @@ jobs:
               "${REUSE_ARGS[@]}" \
               --set image.repository="$IMAGE_REPOSITORY" \
               --set image.tag="$IMAGE_TAG" \
+              --set database.enabled=true \
+              --set postgresql.enabled=true \
+              --set-string postgresql.auth.password="$POSTGRES_PASSWORD" \
               --wait --timeout 10m; then
               exit 0
             fi
@@ -164,4 +179,5 @@ jobs:
         run: |
           set -euo pipefail
           kubectl rollout status deployment/${RELEASE_NAME} -n "$NAMESPACE" --timeout=5m
-          kubectl get svc,pods,pvc -n "$NAMESPACE" -l app.kubernetes.io/instance="$RELEASE_NAME" -o wide
+          kubectl rollout status statefulset/${RELEASE_NAME}-postgres -n "$NAMESPACE" --timeout=5m
+          kubectl get svc,pods,pvc,statefulset -n "$NAMESPACE" -l app.kubernetes.io/instance="$RELEASE_NAME" -o wide
