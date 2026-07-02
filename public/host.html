@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trivia Night — Host</title>
+  <title>quiz-a-roo — Host</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --blue: #1a28b0;
-      --dark: #16166a;
-      --darker: #101052;
-      --panel: #0a0a3a;
-      --panel2: #07072a;
-      --gold: #c09a38;
+      --blue: #051447;
+      --dark: #082a8f;
+      --darker: #020719;
+      --panel: #06123f;
+      --panel2: #03091f;
+      --gold: #ffb21a;
       --white: #fff;
-      --green: #2e7a40;
-      --red: #9e3535;
-      --border: #1e2050;
-      --bg: #080820;
+      --green: #2e9d58;
+      --red: #c23b3b;
+      --border: #173d9a;
+      --bg: #02040f;
     }
 
     body[data-theme="midnight"] {
@@ -503,7 +503,7 @@
 <body>
 
 <header>
-  <h1>TRIVIA NIGHT — HOST</h1>
+  <h1>QUIZ-A-ROO — HOST</h1>
   <span class="phase-badge" id="phase-badge">LOBBY</span>
   <button id="history-btn" title="Game History" style="background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:6px;color:rgba(255,255,255,.45);padding:3px 9px;cursor:pointer;font-size:15px;line-height:1">📜</button>
   <a href="/settings" id="settings-link" title="Settings">⚙</a>
@@ -523,15 +523,16 @@
   <div class="left">
     <div class="panel-body" style="flex:1;overflow-y:auto">
 
-      <!-- QR + PIN (lobby only) -->
+      <!-- QR + Game Code (lobby only) -->
       <div class="section" id="url-section">
         <div class="section-title">Scan to Join</div>
         <div style="text-align:center">
           <img id="qr-img" src="" alt="QR" style="display:none;width:150px;height:150px;border-radius:6px">
         </div>
         <div style="margin-top:14px;text-align:center">
-          <div class="section-title" style="margin-bottom:4px">Host PIN</div>
-          <div id="host-pin-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
+          <div class="section-title" style="margin-bottom:4px">Game Code</div>
+          <div id="game-code-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
+          <div id="join-url-display" style="margin-top:8px;font-size:11px;line-height:1.35;color:rgba(255,255,255,.42);word-break:break-all"></div>
         </div>
       </div>
 
@@ -1150,11 +1151,16 @@
   // ── Connect ───────────────────────────────────────────────────────────────
 
   socket.on('connect', () => socket.emit('join-host'));
+  socket.on('host-auth-error', msg => {
+    alert(msg || 'Host access requires login.');
+    window.location.href = '/login?next=host';
+  });
 
-  socket.on('player-url', ({ qr, pin }) => {
+  socket.on('player-url', ({ qr, url, code }) => {
     const img = document.getElementById('qr-img');
     if (qr) { img.src = qr; img.style.display = 'block'; } else img.style.display = 'none';
-    if (pin) document.getElementById('host-pin-display').textContent = pin;
+    if (code) document.getElementById('game-code-display').textContent = code;
+    if (url) document.getElementById('join-url-display').textContent = url;
   });
 
   let hTimerInterval = null;

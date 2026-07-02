@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta http-equiv="Cache-Control" content="no-store">
-  <title>Trivia Night — Player</title>
+  <title>quiz-a-roo — Player</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     :root {
-      --blue: #1a28b0;
-      --dark: #16166a;
-      --gold: #c09a38;
+      --blue: #051447;
+      --dark: #082a8f;
+      --gold: #ffb21a;
       --white: #fff;
       --green: #2e7a40;
       --red: #9e3535;
@@ -45,7 +45,7 @@
 
     html, body {
       width: 100%; height: 100%;
-      background: var(--blue);
+      background: radial-gradient(circle at 50% -10%, rgba(54,134,255,.32), transparent 42%), radial-gradient(circle at 18% 100%, rgba(119,38,255,.26), transparent 30%), var(--blue);
       color: var(--white);
       font-family: Georgia, serif;
       touch-action: manipulation;
@@ -478,8 +478,9 @@
 
 <!-- JOIN -->
 <div id="join-screen" class="screen centered active">
-  <h1>Trivia Night</h1>
+  <h1>quiz-a-roo</h1>
   <div id="join-form">
+    <input id="join-code" type="text" placeholder="Game code" maxlength="4" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:5px;text-align:center;font-family:monospace;font-weight:800">
     <input id="join-name" type="text" placeholder="Your name" maxlength="20" autocomplete="off">
     <div class="emoji-label">Pick an emoji (optional)</div>
     <div class="emoji-grid" id="emoji-grid"></div>
@@ -490,7 +491,7 @@
 
 <!-- LOBBY / WAITING -->
 <div id="wait-screen" class="screen centered">
-  <h1>Trivia Night</h1>
+  <h1>quiz-a-roo</h1>
   <div class="score-chip">
     <span id="wait-name">Player</span><br>
     <span class="amt" id="wait-score">$0</span>
@@ -501,7 +502,7 @@
 
 <!-- TEAM SELECTION -->
 <div id="team-screen" class="screen scrollable">
-  <h1>Trivia Night</h1>
+  <h1>quiz-a-roo</h1>
   <div style="font-size:18px;opacity:.75;margin-bottom:4px">Join a Team</div>
   <div id="team-list" style="width:100%;max-width:400px;display:flex;flex-direction:column;gap:10px"></div>
   <div id="create-team-form">
@@ -683,21 +684,29 @@
   let myId   = null;
   let state  = null;
   let selectedCatIndex = null; // tracks step-1 selection
+  const params = new URLSearchParams(location.search);
+  const initialCode = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  if (initialCode) document.getElementById('join-code').value = initialCode;
 
   // ── Join ──────────────────────────────────────────────────────────────────
 
   document.getElementById('join-btn').addEventListener('click', doJoin);
   document.getElementById('join-name').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+  document.getElementById('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+  document.getElementById('join-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); });
 
   function doJoin() {
     const name = document.getElementById('join-name').value.trim();
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    if (code.length !== 4) { document.getElementById('join-error').textContent = 'Enter the 4-character game code.'; return; }
     if (!name) { document.getElementById('join-error').textContent = 'Enter a name.'; return; }
-    socket.emit('join-player', { name, emoji: selectedEmoji });
+    socket.emit('join-player', { name, emoji: selectedEmoji, code });
   }
 
   socket.on('connect', () => {
     const token = localStorage.getItem('trivia_token');
-    if (token) socket.emit('rejoin-player', { token });
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    if (token && code.length === 4) socket.emit('rejoin-player', { token, code });
   });
 
   socket.on('join-error', msg => { document.getElementById('join-error').textContent = msg; });

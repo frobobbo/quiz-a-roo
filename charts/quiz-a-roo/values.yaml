@@ -49,6 +49,34 @@ env:
 #       name: quiz-a-roo-provider-keys
 extraEnvFrom: []
 
+# ── Database ──────────────────────────────────────────────────────────────────
+# Set database.enabled=true to activate PostgreSQL persistence.
+# The app falls back to JSON-file storage when disabled.
+database:
+  enabled: false
+
+  # Supply DATABASE_URL from an existing Secret (recommended for production).
+  # When set, the built-in Postgres StatefulSet is ignored.
+  #   kubectl create secret generic quiz-a-roo-db \
+  #     --from-literal=DATABASE_URL='postgres://user:pass@host:5432/db'
+  existingSecret: ""
+  existingSecretKey: DATABASE_URL
+
+# Built-in single-node Postgres StatefulSet (for dev/staging).
+# Ignored when database.existingSecret is set.
+postgresql:
+  enabled: true
+  image: postgres:16-alpine
+  auth:
+    database: quizaroo
+    username: quizaroo
+    # Set a real password here or, better, use database.existingSecret in production.
+    password: "changeme"
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+
 persistence:
   enabled: true
   size: 2Gi

@@ -9,6 +9,12 @@ const QRCode = require('qrcode');
 const { defaultQuestions } = require('./questions');
 const Anthropic = require('@anthropic-ai/sdk');
 
+const settingsRepo = require('./db/repositories/settingsRepo');
+const libraryRepo = require('./db/repositories/libraryRepo');
+const historyRepo = require('./db/repositories/historyRepo');
+const userRepo = require('./db/repositories/userRepo');
+const siteRepo = require('./db/repositories/siteRepo');
+
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 
 function dataPath(...parts) {
@@ -119,42 +125,22 @@ function searchDeezerTracks(query, limit = 50) {
 }
 
 const PORT = process.env.PORT || 3000;
-const LIBRARY_FILE = dataPath('library.json');
-const LIBRARIES_DIR = dataPath('libraries');
-const HISTORY_FILE = dataPath('history.json');
-const APP_SETTINGS_FILE = dataPath('app-settings.json');
 
 // ── History ───────────────────────────────────────────────────────────────────
 
-function loadHistory() {
-  try {
-    if (fs.existsSync(HISTORY_FILE)) return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-  } catch (e) { console.error('Failed to load history.json:', e.message); }
-  return [];
-}
-
 function saveHistory() {
-  try { fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2)); }
-  catch (e) { console.error('Failed to save history.json:', e.message); }
+  historyRepo.saveHistoryFile(history, activeUserId).catch(e => console.error('saveHistory error:', e));
 }
 
-let history = loadHistory();
+let history = [];
 
 // ── App settings (persistent defaults) ───────────────────────────────────────
 
-function loadAppSettings() {
-  try {
-    if (fs.existsSync(APP_SETTINGS_FILE)) return JSON.parse(fs.readFileSync(APP_SETTINGS_FILE, 'utf8'));
-  } catch (e) { console.warn('Could not read app-settings.json:', e.message); }
-  return { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
-}
-
 function saveAppSettings() {
-  try { fs.writeFileSync(APP_SETTINGS_FILE, JSON.stringify(appSettings, null, 2)); }
-  catch (e) { console.error('Failed to save app-settings.json:', e.message); }
+  settingsRepo.saveAppSettings(appSettings, activeUserId).catch(e => console.error('saveAppSettings error:', e));
 }
 
-let appSettings = loadAppSettings();
+let appSettings = { gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null };
 
 function recordGameResult() {
   const isTeamGame = game.settings.teamMode && game.teams.length > 0;
@@ -176,9 +162,14 @@ function recordGameResult() {
     teams: game.teams.map(t => ({ name: t.name, score: t.score })),
     categoriesPlayed: [...game.categories, ...game.round2Categories].map(c => c.name),
   };
+  // Update in-memory history immediately for the current session.
   history.unshift(entry);
   if (history.length > 50) history = history.slice(0, 50);
-  saveHistory();
+  // Persist asynchronously (DB: inserts one row; file: rewrites the array).
+  historyRepo.appendHistory(entry, 50, activeUserId).then(refreshed => {
+    if (refreshed !== null) history = refreshed;
+    else saveHistory();
+  }).catch(e => console.error('recordGameResult persist error:', e));
 
   // Mark each played category in the library so it can be flagged and excluded from future randomization
   const playedIds = new Set([...game.categories, ...game.round2Categories].map(c => c.id).filter(Boolean));
@@ -189,9 +180,8 @@ function recordGameResult() {
   if (libChanged) { saveLibrary(); broadcastLibrary(); }
 }
 
-// ── Host PIN auth ─────────────────────────────────────────────────────────────
-const HOST_PIN   = '2653';
-const HOST_TOKEN = crypto.randomBytes(16).toString('hex');
+// ── Site settings / roles ─────────────────────────────────────────────────────
+let siteSettings = { ...siteRepo.DEFAULT_SITE_SETTINGS };
 
 const app = express();
 const server = http.createServer(app);
@@ -201,6 +191,9 @@ app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {
     res.setHeader('Cache-Control', 'no-store');
   }
+  if (req.path === '/admin.html') return res.redirect('/admin');
+  if (req.path === '/host.html') return res.redirect('/host');
+  if (req.path === '/settings.html') return res.redirect('/settings');
   next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
@@ -209,21 +202,185 @@ app.use(express.json());
 
 app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+function parseCookies(req) {
+  const out = {};
+  const header = req.headers.cookie || '';
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 1) continue;
+    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+  }
+  return out;
+}
+
+async function getCurrentUser(req) {
+  const cookies = parseCookies(req);
+  const token = cookies.auth_token;
+  if (!token) return null;
+  try {
+    const session = await userRepo.getSession(token);
+    if (!session) return null;
+    const user = await userRepo.getUserById(session.userId);
+    if (!user || user.active === false) return null;
+    return { ...user, token };
+  } catch {
+    return null;
+  }
+}
+
+function requireRole(roles) {
+  const allowed = Array.isArray(roles) ? roles : [roles];
+  return (req, res, next) => {
+    getCurrentUser(req).then(async user => {
+      if (!user || !allowed.includes(user.role)) return res.status(403).json({ error: 'Forbidden' });
+      if (allowed.includes('host')) await activateHostUser(user);
+      req.user = user;
+      next();
+    }).catch(err => {
+      if (/Another host is already active/.test(err.message || '')) return res.status(409).json({ error: err.message });
+      return res.status(403).json({ error: 'Forbidden' });
+    });
+  };
+}
+
+async function getSocketUser(socket) {
+  const user = await getCurrentUser({ headers: socket.request.headers || {} });
+  if (!user || !['host', 'site_admin'].includes(user.role)) return null;
+  return activateHostUser(user);
+}
+
+io.use(async (socket, next) => {
+  try {
+    socket.data.user = await getSocketUser(socket);
+  } catch {
+    socket.data.user = null;
+  }
+  next();
+});
+
+// Active user id for process-global state (last logged-in host user).
+let activeUserId = 1;
+
+function hasActiveHostSessionForOtherUser(userId) {
+  const hostRoom = io.sockets.adapter.rooms.get('host');
+  if (!hostRoom) return false;
+  for (const socketId of hostRoom) {
+    const hostSocket = io.sockets.sockets.get(socketId);
+    const hostUserId = hostSocket?.data?.user?.id;
+    if (hostUserId && +hostUserId !== +userId) return true;
+  }
+  return false;
+}
+
+async function activateHostUser(user) {
+  if (!user || !['host', 'site_admin'].includes(user.role)) throw new Error('Host access requires a Host or Site Admin login.');
+  if (+user.id === +activeUserId) return user;
+  if (hasActiveHostSessionForOtherUser(user.id) || (activeUserId !== 1 && (game.phase !== 'lobby' || game.players.length > 0))) {
+    throw new Error('Another host is already active on this app instance. Finish that session or deploy a separate instance before switching users.');
+  }
+  await loadUserState(user.id);
+  return user;
+}
+
+async function loadUserState(userId) {
+  activeUserId = userId;
+  appSettings = await settingsRepo.loadAppSettings({ gameDefaults: {}, defaultTheme: 'classic', customThemeVars: null }, userId);
+  history = await historyRepo.loadHistory(50, userId);
+  await libraryRepo.initializeLibraries(appSettings, userId);
+  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
+  libraryNames = await libraryRepo.listLibraries(userId);
+  lib = await libraryRepo.loadLibrary(appSettings.activeLibrary, userId);
+  if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
+}
+
+// ── Login / logout routes ─────────────────────────────────────────────────────
+
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+
+app.post('/login', async (req, res) => {
+  const username = (req.body.username || '').trim();
+  const password = req.body.password || '';
+  if (!username || !password) return res.redirect('login?error=missing');
+  let user;
+  try {
+    const exists = await userRepo.userExists(username);
+    if (!exists && siteSettings.registrationEnabled === false) return res.redirect('login?error=registration');
+    user = await userRepo.getOrCreateUser(username, password);
+  } catch {
+    return res.redirect('login?error=invalid');
+  }
+  const token = await userRepo.createSession(user.id);
+  const requested = req.query.next;
+  const next = (requested === 'admin' && user.role === 'site_admin') ? 'admin' : (user.role === 'site_admin' ? 'admin' : 'host');
+  res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
+  res.redirect(next);
+});
+
+app.get('/logout', async (req, res) => {
+  const cookies = parseCookies(req);
+  if (cookies.auth_token) await userRepo.deleteSession(cookies.auth_token).catch(() => {});
+  res.setHeader('Set-Cookie', [
+    'auth_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+  ]);
+  res.redirect('login');
+});
+
+app.post('/logout', async (req, res) => {
+  const cookies = parseCookies(req);
+  if (cookies.auth_token) await userRepo.deleteSession(cookies.auth_token).catch(() => {});
+  res.setHeader('Set-Cookie', [
+    'auth_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+  ]);
+  res.redirect('login');
+});
+
 app.get('/board',  (req, res) => res.sendFile(path.join(__dirname, 'public', 'board.html')));
 app.get('/player', (req, res) => res.sendFile(path.join(__dirname, 'public', 'player.html')));
 
-app.get('/host', (req, res) => {
-  const cookie = req.headers.cookie || '';
-  const m = cookie.match(/host_auth=([a-f0-9]+)/);
-  if (m && m[1] === HOST_TOKEN) return res.sendFile(path.join(__dirname, 'public', 'host.html'));
-  res.sendFile(path.join(__dirname, 'public', 'host-pin.html'));
+app.get('/host', async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) return res.redirect('login?next=host');
+  if (!['host', 'site_admin'].includes(user.role)) return res.status(403).send('Forbidden');
+  try {
+    await activateHostUser(user);
+  } catch (err) {
+    if (/Another host is already active/.test(err.message || '')) return res.status(409).send(err.message);
+    return res.status(403).send('Forbidden');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'host.html'));
 });
-function requireHost(req, res, next) {
-  const cookie = req.headers.cookie || '';
-  const m = cookie.match(/host_auth=([a-f0-9]+)/);
-  if (m && m[1] === HOST_TOKEN) return next();
-  res.status(403).json({ error: 'Forbidden' });
-}
+
+app.get('/admin', async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) return res.redirect('login?next=admin');
+  if (user.role !== 'site_admin') return res.status(403).send('Forbidden');
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+const requireHost = requireRole(['host', 'site_admin']);
+const requireSiteAdmin = requireRole('site_admin');
+
+app.get('/api/admin/site-settings', requireSiteAdmin, (req, res) => res.json(siteSettings));
+
+app.post('/api/admin/site-settings', requireSiteAdmin, async (req, res) => {
+  siteSettings = await siteRepo.saveSiteSettings({ ...siteSettings, ...req.body });
+  res.json(siteSettings);
+});
+
+app.get('/api/admin/users', requireSiteAdmin, async (req, res) => {
+  res.json({ users: await userRepo.listUsers() });
+});
+
+app.post('/api/admin/users/:id', requireSiteAdmin, async (req, res) => {
+  const targetId = Number(req.params.id);
+  if (!Number.isFinite(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+  if (targetId === req.user.id && req.body.active === false) return res.status(400).json({ error: 'You cannot disable your own admin account.' });
+  const updated = await userRepo.updateUser(targetId, { role: req.body.role, active: req.body.active });
+  if (!updated) return res.status(404).json({ error: 'User not found' });
+  res.json(updated);
+});
 
 app.get('/api/history', requireHost, (req, res) => res.json(history));
 
@@ -339,7 +496,7 @@ app.post('/api/app-settings', requireHost, (req, res) => {
       cfg.SPOTIFY_CLIENT_SECRET = spotifyClientSecret;
       _spotifyToken = null;
     }
-    try { fs.writeFileSync(dataPath('config.json'), JSON.stringify(cfg, null, 2)); }
+    try { settingsRepo.saveConfig(cfg); }
     catch (e) { return res.status(500).json({ error: 'Failed to save API key.' }); }
   }
   if (gameDefaults && typeof gameDefaults === 'object') appSettings.gameDefaults = { ...appSettings.gameDefaults, ...gameDefaults };
@@ -351,63 +508,21 @@ app.post('/api/app-settings', requireHost, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/host-auth', (req, res) => {
-  if ((req.body.pin || '').trim() === HOST_PIN) {
-    res.setHeader('Set-Cookie', `host_auth=${HOST_TOKEN}; Path=/; SameSite=Strict`);
-    return res.redirect('/host');
-  }
-  res.redirect('/host-pin?error=1');
-});
+// ── Library (persists via repository) ────────────────────────────────────────
 
-// ── Library (persists to disk) ────────────────────────────────────────────────
+// In-memory cache of library names, populated in main() and kept in sync.
+let libraryNames = ['Default'];
 
 function listLibraries() {
-  try {
-    if (!fs.existsSync(LIBRARIES_DIR)) return ['Default'];
-    const names = fs.readdirSync(LIBRARIES_DIR)
-      .filter(f => f.endsWith('.json'))
-      .map(f => f.slice(0, -5))
-      .sort();
-    return names.length ? names : ['Default'];
-  } catch (e) { return ['Default']; }
-}
-
-function activeLibraryPath() {
-  const name = appSettings.activeLibrary || 'Default';
-  return path.join(LIBRARIES_DIR, name + '.json');
-}
-
-function loadLibrary() {
-  if (!fs.existsSync(LIBRARIES_DIR)) {
-    fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
-  }
-  // Migrate legacy library.json to named libraries/ on first run
-  if (!appSettings.activeLibrary && fs.existsSync(LIBRARY_FILE)) {
-    try {
-      const legacy = JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
-      fs.writeFileSync(path.join(LIBRARIES_DIR, 'Default.json'), JSON.stringify(legacy, null, 2));
-    } catch (e) { console.warn('Library migration failed:', e.message); }
-  }
-  if (!appSettings.activeLibrary) appSettings.activeLibrary = 'Default';
-  try {
-    const libPath = activeLibraryPath();
-    if (fs.existsSync(libPath)) return JSON.parse(fs.readFileSync(libPath, 'utf8'));
-    // Fallback to legacy file
-    if (fs.existsSync(LIBRARY_FILE)) return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
-  } catch (e) { console.error('Failed to load library:', e.message); }
-  const categories = defaultQuestions.map((cat, i) => ({ ...cat, id: i }));
-  return { categories, nextId: categories.length, activeIds: categories.map(c => c.id) };
+  return libraryNames;
 }
 
 function saveLibrary() {
-  if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
-  try { fs.writeFileSync(activeLibraryPath(), JSON.stringify(lib, null, 2)); }
-  catch (e) { console.error('Failed to save library:', e.message); }
+  libraryRepo.saveLibrary(appSettings.activeLibrary || 'Default', lib, activeUserId)
+    .catch(e => console.error('saveLibrary error:', e));
 }
 
-let lib = loadLibrary();
-if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
-saveAppSettings(); // persist activeLibrary if it was just set during migration
+let lib = { categories: [], nextId: 0, activeIds: [], pages: [{ id: 1, name: 'Page 1' }] };
 
 function generateToken() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
@@ -425,12 +540,23 @@ function broadcastLibrary() {
 
 // ── Game state ────────────────────────────────────────────────────────────────
 
+const GAME_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateGameCode() {
+  let out = '';
+  for (let i = 0; i < 4; i++) out += GAME_CODE_ALPHABET[crypto.randomInt(GAME_CODE_ALPHABET.length)];
+  return out;
+}
+function normalizeGameCode(code) {
+  return String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+}
+
 const VALID_THEMES = ['classic','midnight','retro','forest','crimson','ocean','violet'];
 
 function freshState() {
   const d = appSettings.gameDefaults || {};
   return {
     phase: 'lobby',
+    code: generateGameCode(),
     theme: appSettings.defaultTheme || 'classic',
     round: 1,
     players: [],
@@ -585,22 +711,32 @@ function getLocalIP() {
   return 'localhost';
 }
 
-function playerUrl() { return `http://${getLocalIP()}:${PORT}/player`; }
+function baseUrlFromHeaders(headers = {}) {
+  if (siteSettings.publicBaseUrl) return siteSettings.publicBaseUrl.replace(/\/+$/, '');
+  const host = String(headers['x-forwarded-host'] || headers.host || `localhost:${PORT}`).split(',')[0].trim();
+  const proto = String(headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+function playerUrl(headers = {}) { return `${baseUrlFromHeaders(headers)}/player?code=${encodeURIComponent(game.code)}`; }
 
-let qrDataUrl = null;
-async function buildQR() {
+async function playerLinkPayload(headers = {}) {
+  const url = playerUrl(headers);
+  let qr = null;
   try {
-    qrDataUrl = await QRCode.toDataURL(playerUrl(), {
+    qr = await QRCode.toDataURL(url, {
       width: 300, margin: 2,
       color: { dark: '#000080', light: '#FFD700' },
     });
   } catch (e) { console.error('QR generation failed:', e.message); }
+  return { url, qr, code: game.code };
 }
 
 function publicState() {
   const revealFinal = ['final-question', 'game-over'].includes(game.phase);
   return {
     phase: game.phase,
+    code: game.code,
+    gameCode: game.code,
     theme: game.theme,
     round: game.round,
     players: game.players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji || '', score: p.score, isCurrentTurn: p.isCurrentTurn, teamId: p.teamId || null })),
@@ -893,22 +1029,55 @@ app.post('/api/tts', (req, res) => {
 
 // ── Sockets ───────────────────────────────────────────────────────────────────
 
-io.on('connection', socket => {
+const HOST_ONLY_EVENTS = new Set([
+  'add-category', 'delete-category', 'add-generated-categories', 'generate-categories',
+  'bulk-delete-categories', 'update-category-name', 'set-active', 'update-question',
+  'add-question', 'delete-question', 'bulk-delete-questions', 'toggle-question',
+  'add-generated-questions', 'generate-questions', 'randomize-game',
+  'reset-played-categories', 'deactivate-all-categories', 'reset-library', 'remove-player',
+  'set-category-round', 'set-category-page', 'add-page', 'rename-page', 'delete-page',
+  'switch-page', 'start-game', 'start-round2', 'reveal-final-question', 'judge-final',
+  'select-question', 'host-select-question', 'judge-answer', 'host-pick-dd-player',
+  'update-settings', 'toggle-game-mode', 'judge-all-play', 'finish-all-play',
+  'duplicate-category', 'import-library', 'import-csv-questions', 'create-library',
+  'switch-library', 'delete-library', 'rename-library', 'skip-question',
+  'dismiss-answer-reveal', 'undo-last-score', 'toggle-pause', 'adjust-score',
+  'adjust-team-score', 'set-score', 'set-team-score', 'set-theme', 'set-custom-theme',
+  'rematch', 'generate-category-from-source', 'reset-game', 'get-history', 'clear-history',
+]);
 
-  socket.on('join-board', () => {
-    socket.join('board');
-    socket.emit('game-state', publicState());
-    socket.emit('player-url', { url: playerUrl(), qr: qrDataUrl });
+function isHostSocket(socket) {
+  return !!socket.data.user && ['host', 'site_admin'].includes(socket.data.user.role);
+}
+
+io.on('connection', socket => {
+  socket.use((packet, next) => {
+    const eventName = packet?.[0];
+    if (HOST_ONLY_EVENTS.has(eventName) && !isHostSocket(socket)) {
+      socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.');
+      return next(new Error('Host access required'));
+    }
+    next();
   });
 
-  socket.on('join-host', () => {
+  socket.on('join-board', async () => {
+    socket.join('board');
+    socket.emit('game-state', publicState());
+    socket.emit('player-url', await playerLinkPayload(socket.request.headers));
+  });
+
+  socket.on('join-host', async () => {
+    const user = socket.data.user || await getSocketUser(socket);
+    if (!user) { socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.'); return; }
+    socket.data.user = user;
     socket.join('host');
     socket.emit('host-state', hostState());
     socket.emit('library-state', { categories: lib.categories, activeIds: lib.activeIds, pages: lib.pages, libraries: listLibraries(), activeLibrary: appSettings.activeLibrary || 'Default' });
-    socket.emit('player-url', { url: playerUrl(), qr: qrDataUrl, pin: HOST_PIN });
+    socket.emit('player-url', await playerLinkPayload(socket.request.headers));
   });
 
-  socket.on('join-player', ({ name, emoji }) => {
+  socket.on('join-player', ({ name, emoji, code }) => {
+    if (normalizeGameCode(code) !== game.code) { socket.emit('join-error', 'Enter the correct 4-character game code.'); return; }
     if (game.phase !== 'lobby') { socket.emit('join-error', 'Game already in progress.'); return; }
     const trimmed = (name || '').trim().slice(0, 20);
     if (!trimmed) { socket.emit('join-error', 'Name cannot be empty.'); return; }
@@ -955,7 +1124,8 @@ io.on('connection', socket => {
     broadcast();
   });
 
-  socket.on('rejoin-player', ({ token }) => {
+  socket.on('rejoin-player', ({ token, code }) => {
+    if (normalizeGameCode(code) !== game.code) { socket.emit('rejoin-failed'); return; }
     const player = game.players.find(p => p.token === token);
     if (!player) { socket.emit('rejoin-failed'); return; }
     const oldId = player.id;
@@ -1804,54 +1974,51 @@ JSON format (return exactly this structure, no extra text):
 
   // ── Library pack management ────────────────────────────────────────────────
 
-  socket.on('create-library', ({ name } = {}) => {
+  socket.on('create-library', async ({ name } = {}) => {
     const safeName = (name || '').trim().replace(/[/\\?%*:|"<>]/g, '').slice(0, 40);
     if (!safeName) return;
-    const allLibs = listLibraries();
-    if (allLibs.some(l => l.toLowerCase() === safeName.toLowerCase())) {
+    if (libraryNames.some(l => l.toLowerCase() === safeName.toLowerCase())) {
       socket.emit('game-error', 'A library with that name already exists.'); return;
     }
-    if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
     const empty = { categories: [], nextId: 0, activeIds: [], pages: [{ id: 1, name: 'Page 1' }] };
-    fs.writeFileSync(path.join(LIBRARIES_DIR, safeName + '.json'), JSON.stringify(empty, null, 2));
+    try { await libraryRepo.createLibrary(safeName, empty, activeUserId); } catch (e) { return; }
+    libraryNames = [...libraryNames, safeName].sort();
     broadcastLibrary();
   });
 
-  socket.on('switch-library', ({ name } = {}) => {
+  socket.on('switch-library', async ({ name } = {}) => {
     if (!name) return;
-    if (!listLibraries().includes(name)) { socket.emit('game-error', 'Library not found.'); return; }
+    if (!libraryNames.includes(name)) { socket.emit('game-error', 'Library not found.'); return; }
     saveLibrary();
     appSettings.activeLibrary = name;
     saveAppSettings();
-    lib = loadLibrary();
+    lib = await libraryRepo.loadLibrary(name, activeUserId);
     if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
     broadcastLibrary();
   });
 
-  socket.on('delete-library', ({ name } = {}) => {
-    const allLibs = listLibraries();
-    if (!allLibs.includes(name)) return;
-    if (allLibs.length <= 1) { socket.emit('game-error', 'Cannot delete the only library.'); return; }
-    try { fs.unlinkSync(path.join(LIBRARIES_DIR, name + '.json')); } catch (e) { return; }
+  socket.on('delete-library', async ({ name } = {}) => {
+    if (!libraryNames.includes(name)) return;
+    if (libraryNames.length <= 1) { socket.emit('game-error', 'Cannot delete the only library.'); return; }
+    try { await libraryRepo.deleteLibrary(name, activeUserId); } catch (e) { return; }
+    libraryNames = libraryNames.filter(l => l !== name);
     if (appSettings.activeLibrary === name) {
-      appSettings.activeLibrary = allLibs.find(l => l !== name) || 'Default';
+      appSettings.activeLibrary = libraryNames[0] || 'Default';
       saveAppSettings();
-      lib = loadLibrary();
+      lib = await libraryRepo.loadLibrary(appSettings.activeLibrary, activeUserId);
       if (!lib.pages) lib.pages = [{ id: 1, name: 'Page 1' }];
     }
     broadcastLibrary();
   });
 
-  socket.on('rename-library', ({ oldName, newName } = {}) => {
+  socket.on('rename-library', async ({ oldName, newName } = {}) => {
     const safeName = (newName || '').trim().replace(/[/\\?%*:|"<>]/g, '').slice(0, 40);
-    const allLibs = listLibraries();
-    if (!safeName || !allLibs.includes(oldName)) return;
-    if (allLibs.some(l => l.toLowerCase() === safeName.toLowerCase() && l !== oldName)) {
+    if (!safeName || !libraryNames.includes(oldName)) return;
+    if (libraryNames.some(l => l.toLowerCase() === safeName.toLowerCase() && l !== oldName)) {
       socket.emit('game-error', 'A library with that name already exists.'); return;
     }
-    try {
-      fs.renameSync(path.join(LIBRARIES_DIR, oldName + '.json'), path.join(LIBRARIES_DIR, safeName + '.json'));
-    } catch (e) { return; }
+    try { await libraryRepo.renameLibrary(oldName, safeName, activeUserId); } catch (e) { return; }
+    libraryNames = libraryNames.map(l => l === oldName ? safeName : l).sort();
     if (appSettings.activeLibrary === oldName) {
       appSettings.activeLibrary = safeName;
       saveAppSettings();
@@ -2173,7 +2340,7 @@ JSON format (return exactly this structure, no extra text):
   socket.on('clear-history', () => {
     if (!io.sockets.adapter.rooms.get('host')?.has(socket.id)) return;
     history = [];
-    saveHistory();
+    historyRepo.clearHistory(activeUserId).catch(e => console.error('clearHistory error:', e));
     socket.emit('history-data', history);
   });
 
@@ -2187,24 +2354,38 @@ JSON format (return exactly this structure, no extra text):
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-server.listen(PORT, '0.0.0.0', async () => {
-  await buildQR();
-  const ip = getLocalIP();
-  console.log('\n  TRIVIA NIGHT SERVER');
-  console.log('  ─────────────────────────────────────────');
-  console.log(`  Board  (TV):    http://${ip}:${PORT}/board`);
-  console.log(`  Host:           http://${ip}:${PORT}/host  (PIN: ${HOST_PIN})`);
-  console.log(`  Player (phone): http://${ip}:${PORT}/player`);
-  console.log('  ─────────────────────────────────────────\n');
+async function main() {
+  siteSettings = await siteRepo.loadSiteSettings();
+  // Load default-user persistent state asynchronously before accepting connections.
+  // Actual host login switches this process-global state to the authenticated user.
+  await loadUserState(1);
 
-  // Pre-warm the ElevenLabs TCP connection so the first TTS call isn't slow
-  if (elevenLabsKey) {
-    const warmReq = https.request({
-      hostname: 'api.elevenlabs.io', path: '/v1/user', method: 'GET',
-      agent: elevenLabsAgent,
-      headers: { 'xi-api-key': elevenLabsKey },
-    }, r => r.resume());
-    warmReq.on('error', () => {});
-    warmReq.end();
-  }
-});
+  // Persist any settings mutations that happened during initialization.
+  await settingsRepo.saveAppSettings(appSettings, activeUserId).catch(() => {});
+
+  server.listen(PORT, '0.0.0.0', () => {
+    const ip = getLocalIP();
+    const localBase = `http://${ip}:${PORT}`;
+    console.log('\n  QUIZ-A-ROO SERVER');
+    console.log('  ─────────────────────────────────────────');
+    console.log(`  Board  (TV):    ${localBase}/board`);
+    console.log(`  Admin:          ${localBase}/admin`);
+    console.log(`  Host:           ${localBase}/host`);
+    console.log(`  Player (phone): ${localBase}/player?code=${game.code}`);
+    console.log(`  Game Code:      ${game.code}`);
+    console.log('  ─────────────────────────────────────────\n');
+
+    // Pre-warm the ElevenLabs TCP connection so the first TTS call isn't slow
+    if (elevenLabsKey) {
+      const warmReq = https.request({
+        hostname: 'api.elevenlabs.io', path: '/v1/user', method: 'GET',
+        agent: elevenLabsAgent,
+        headers: { 'xi-api-key': elevenLabsKey },
+      }, r => r.resume());
+      warmReq.on('error', () => {});
+      warmReq.end();
+    }
+  });
+}
+
+main().catch(e => { console.error('Fatal startup error:', e); process.exit(1); });

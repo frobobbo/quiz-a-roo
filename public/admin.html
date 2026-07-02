@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>quiz-a-roo — Site Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#02040f; --panel:#06123f; --blue:#082a8f; --gold:#ffb21a; --line:rgba(255,178,26,.24); --white:#fff; --muted:rgba(255,255,255,.58); --green:#44bb77; --red:#ff6b6b; }
+    html, body { min-height: 100%; background: radial-gradient(circle at 50% -10%, rgba(54,134,255,.32), transparent 42%), var(--bg); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    header { height: 56px; display:flex; align-items:center; gap:12px; padding:0 24px; background:#020719; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+    h1 { font-family: Impact, sans-serif; color:var(--gold); font-size:18px; letter-spacing:3px; flex:1; }
+    a { color:var(--gold); text-decoration:none; }
+    .page { max-width: 1000px; margin: 0 auto; padding: 28px 18px 60px; display:grid; gap:20px; }
+    .card { background:rgba(6,18,63,.88); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,.28); }
+    .card h2 { font-family:Impact,sans-serif; color:var(--gold); font-size:15px; letter-spacing:2px; text-transform:uppercase; padding:16px 18px 12px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .body { padding:18px; display:grid; gap:14px; }
+    label { display:grid; gap:6px; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); }
+    input[type="text"] { width:100%; padding:12px 13px; border-radius:10px; border:1px solid rgba(255,255,255,.18); background:var(--blue); color:var(--white); font-size:15px; outline:none; }
+    input[type="text"]:focus { border-color:var(--gold); }
+    .toggle { display:flex; align-items:center; gap:10px; color:var(--white); text-transform:none; letter-spacing:0; font-size:14px; }
+    input[type="checkbox"] { width:18px; height:18px; accent-color:var(--gold); }
+    button { border:none; border-radius:10px; background:var(--gold); color:#140900; font-weight:800; padding:10px 16px; cursor:pointer; }
+    button.secondary { background:transparent; color:var(--gold); border:1px solid var(--line); }
+    button:disabled { opacity:.5; cursor:default; }
+    .feedback { min-height:18px; font-size:13px; color:var(--green); }
+    .feedback.err { color:var(--red); }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,.08); font-size:14px; }
+    th { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:1.5px; }
+    select { background:var(--blue); color:var(--white); border:1px solid rgba(255,255,255,.18); border-radius:8px; padding:8px; }
+    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:800; }
+    .pill.on { background:rgba(68,187,119,.18); color:#71e59f; }
+    .pill.off { background:rgba(255,107,107,.16); color:#ff9a9a; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>QUIZ-A-ROO — SITE ADMIN</h1>
+  <a href="/host">Host</a>
+  <a href="/logout">Logout</a>
+</header>
+<main class="page">
+  <section class="card">
+    <h2>Global Site Settings</h2>
+    <div class="body">
+      <label>Site name <input id="site-name" type="text" placeholder="quiz-a-roo"></label>
+      <label>Public base URL for QR codes <input id="public-base-url" type="text" placeholder="https://quiz.example.com"></label>
+      <label class="toggle"><input id="registration-enabled" type="checkbox"> Allow public self-registration for new hosts</label>
+      <div><button id="save-settings">Save Settings</button></div>
+      <div id="settings-feedback" class="feedback"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>User Registrations</h2>
+    <div class="body">
+      <div style="color:var(--muted);font-size:13px;line-height:1.45">Site Admin users can access this page and host games. Host users can access the host console only.</div>
+      <table>
+        <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="users-body"><tr><td colspan="4" style="color:var(--muted)">Loading…</td></tr></tbody>
+      </table>
+      <div id="users-feedback" class="feedback"></div>
+    </div>
+  </section>
+</main>
+<script>
+  async function jsonFetch(url, opts = {}) {
+    const res = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  }
+  function feedback(id, msg, err = false) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.classList.toggle('err', err);
+    setTimeout(() => { el.textContent = ''; el.classList.remove('err'); }, 3500);
+  }
+  async function loadSettings() {
+    const s = await jsonFetch('/api/admin/site-settings');
+    document.getElementById('site-name').value = s.siteName || 'quiz-a-roo';
+    document.getElementById('public-base-url').value = s.publicBaseUrl || '';
+    document.getElementById('registration-enabled').checked = s.registrationEnabled !== false;
+  }
+  async function saveSettings() {
+    try {
+      await jsonFetch('/api/admin/site-settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          siteName: document.getElementById('site-name').value,
+          publicBaseUrl: document.getElementById('public-base-url').value,
+          registrationEnabled: document.getElementById('registration-enabled').checked,
+        })
+      });
+      feedback('settings-feedback', 'Settings saved.');
+    } catch (e) { feedback('settings-feedback', e.message, true); }
+  }
+  async function loadUsers() {
+    const { users } = await jsonFetch('/api/admin/users');
+    const body = document.getElementById('users-body');
+    body.innerHTML = users.map(u => `
+      <tr data-id="${u.id}">
+        <td>${u.username}</td>
+        <td><select class="role"><option value="host" ${u.role === 'host' ? 'selected' : ''}>Host</option><option value="site_admin" ${u.role === 'site_admin' ? 'selected' : ''}>Site Admin</option></select></td>
+        <td><span class="pill ${u.active ? 'on' : 'off'}">${u.active ? 'Active' : 'Disabled'}</span></td>
+        <td><button class="save-user secondary">Save</button> <button class="toggle-active secondary">${u.active ? 'Disable' : 'Enable'}</button></td>
+      </tr>`).join('');
+    body.querySelectorAll('.save-user').forEach(btn => btn.addEventListener('click', () => saveUser(btn.closest('tr'))));
+    body.querySelectorAll('.toggle-active').forEach(btn => btn.addEventListener('click', () => toggleUser(btn.closest('tr'), btn.textContent === 'Enable')));
+  }
+  async function saveUser(row, active) {
+    try {
+      const payload = { role: row.querySelector('.role').value };
+      if (active !== undefined) payload.active = active;
+      await jsonFetch(`/api/admin/users/${row.dataset.id}`, { method: 'POST', body: JSON.stringify(payload) });
+      feedback('users-feedback', 'User updated.');
+      await loadUsers();
+    } catch (e) { feedback('users-feedback', e.message, true); }
+  }
+  function toggleUser(row, active) { saveUser(row, active); }
+  document.getElementById('save-settings').addEventListener('click', saveSettings);
+  loadSettings().catch(e => feedback('settings-feedback', e.message, true));
+  loadUsers().catch(e => feedback('users-feedback', e.message, true));
+</script>
+</body>
+</html>

@@ -1,15 +1,18 @@
 {
-  "name": "trivia",
+  "name": "quiz-a-roo",
   "version": "1.0.0",
   "description": "Jeopardy-style multiplayer trivia game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "npx nodemon server.js"
+    "dev": "npx nodemon server.js",
+    "db:migrate": "node db/migrate.js",
+    "test": "node tests/user-auth.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3",
     "express": "^4.18.2",
+    "pg": "^8.22.0",
     "qrcode": "^1.5.3",
     "socket.io": "^4.7.2"
   }
