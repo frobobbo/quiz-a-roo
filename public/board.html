@@ -408,6 +408,35 @@
       to   { transform: translateY(0); }
     }
 
+    /* ── AI HOST PRESENTATION ── */
+    #host-presentation {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 260;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 20%, rgba(255,178,26,.24), transparent 28%), radial-gradient(circle at 20% 80%, rgba(54,134,255,.32), transparent 34%), #020719;
+    }
+    #host-presentation.show { display: flex; }
+    #host-presentation::before, #host-presentation::after {
+      content: '';
+      position: absolute;
+      inset: -35%;
+      background: conic-gradient(from 0deg, transparent, rgba(255,178,26,.26), transparent, rgba(80,150,255,.2), transparent);
+      animation: stage-lights 4.5s linear infinite;
+    }
+    #host-presentation::after { animation-direction: reverse; animation-duration: 7s; opacity: .55; }
+    .host-stage-card { position: relative; z-index: 1; padding: 4vh 5vw; animation: stage-pop .55s cubic-bezier(.2,1.4,.35,1) both; }
+    .host-stage-kicker { font-family: Impact, sans-serif; color: rgba(255,255,255,.62); font-size: clamp(18px, 2.6vw, 34px); letter-spacing: 7px; text-transform: uppercase; margin-bottom: 22px; }
+    .host-stage-main { font-family: Impact, sans-serif; color: var(--gold); font-size: clamp(54px, 10vw, 148px); letter-spacing: 8px; text-transform: uppercase; text-shadow: 0 0 32px rgba(255,178,26,.75), 0 8px 22px rgba(0,0,0,.9); line-height: .95; }
+    .host-stage-logo { font-family: Impact, sans-serif; color: var(--gold); font-size: clamp(64px, 12vw, 170px); letter-spacing: 10px; text-transform: uppercase; text-shadow: 0 0 22px #ffb21a, 0 0 60px rgba(255,178,26,.85), 0 8px 22px rgba(0,0,0,.9); animation: logo-glow 1s ease-in-out infinite alternate; }
+    @keyframes stage-lights { to { transform: rotate(360deg); } }
+    @keyframes stage-pop { from { opacity: 0; transform: scale(.76); } to { opacity: 1; transform: scale(1); } }
+    @keyframes logo-glow { from { filter: brightness(1); } to { filter: brightness(1.45); } }
+
     /* ── SCOREBOARD ANIMATION ── */
     @keyframes score-reveal {
       from { opacity: 0; transform: translateX(-30px); }
@@ -622,14 +651,24 @@
   <div id="final-wager-status"></div>
 </div>
 
+<!-- AI HOST PRESENTATION -->
+<div id="host-presentation" aria-live="polite">
+  <div class="host-stage-card">
+    <div class="host-stage-kicker" id="host-stage-kicker">AI HOST</div>
+    <div class="host-stage-main" id="host-stage-main">QUIZ-A-ROO</div>
+  </div>
+</div>
+
 <button id="mute-btn" title="Toggle sound" style="position:fixed;top:12px;right:12px;z-index:100;background:rgba(0,0,0,.5);border:none;border-radius:6px;padding:6px 10px;font-size:18px;cursor:pointer;color:#fff">🔊</button>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
+  const params = new URLSearchParams(location.search);
+  const initialCode = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
   let state = null;
 
-  socket.on('connect', () => socket.emit('join-board'));
+  socket.on('connect', () => socket.emit('join-board', { code: initialCode }));
 
   socket.on('sound-cue', cue => {
     if (cue === 'correct') playCorrect();
@@ -667,6 +706,9 @@
 
   let prevBuzzId = null;
   let prevPhase = null;
+  let prevRound = null;
+  let announcedWelcomeForCode = null;
+  const announcedRounds = new Set();
   let prevDDCount = 0;
   let ddStartRect = null;
   let timerInterval = null;
@@ -753,6 +795,69 @@
     }
   }
 
+  function speakText(text) {
+    if (!state?.ttsEnabled || !text) return;
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).then(res => {
+      if (!res.ok || res.status === 204) return null;
+      return res.arrayBuffer();
+    }).then(buffer => {
+      if (!buffer) return;
+      const ctx = getAudioCtx();
+      return ctx.resume().then(() => ctx.decodeAudioData(buffer)).then(audioBuffer => {
+        const src = ctx.createBufferSource();
+        src.buffer = audioBuffer;
+        src.connect(ctx.destination);
+        src.start();
+      });
+    }).catch(() => {});
+  }
+
+  function showHostPresentation({ kicker, main, logo = false, duration = 3200 }) {
+    const wrap = document.getElementById('host-presentation');
+    document.getElementById('host-stage-kicker').textContent = kicker || 'AI HOST';
+    const mainEl = document.getElementById('host-stage-main');
+    mainEl.textContent = main || '';
+    mainEl.className = logo ? 'host-stage-logo' : 'host-stage-main';
+    wrap.classList.add('show');
+    clearTimeout(showHostPresentation.timer);
+    showHostPresentation.timer = setTimeout(() => wrap.classList.remove('show'), duration);
+  }
+
+  function announceRoundCategories() {
+    if (!state?.categories?.length) return;
+    const roundKey = `${state.code || 'game'}:${state.round || 1}`;
+    if (announcedRounds.has(roundKey)) return;
+    announcedRounds.add(roundKey);
+    const names = state.categories.map(c => c.name).filter(Boolean);
+    if (!names.length) return;
+    speakText(`Round ${state.round || 1} categories are: ${names.join(', ')}.`);
+    names.slice(0, 8).forEach((name, i) => {
+      setTimeout(() => showHostPresentation({ kicker: `ROUND ${state.round || 1} CATEGORY`, main: name, duration: 1800 }), i * 1750);
+    });
+  }
+
+  function maybeRunHostAnnouncements() {
+    if (!state || state.phase === 'lobby') return;
+    if (announcedWelcomeForCode !== state.code) {
+      announcedWelcomeForCode = state.code;
+      speakText('Welcome to Quiz-a-roo!!');
+      showHostPresentation({ kicker: 'WELCOME TO', main: 'QUIZ-A-ROO!!', logo: true, duration: 3600 });
+      setTimeout(announceRoundCategories, 3600);
+      prevRound = state.round;
+      return;
+    }
+    if (state.round !== prevRound) {
+      prevRound = state.round;
+      announceRoundCategories();
+    } else if (state.phase === 'selecting') {
+      announceRoundCategories();
+    }
+  }
+
   function render() {
     if (!state) return;
 
@@ -776,6 +881,8 @@
         (state.phase === 'question' || state.phase === 'tiebreaker')) {
       speakQuestion(state.currentQuestion);
     }
+
+    maybeRunHostAnnouncements();
 
     // Pause banner
     document.getElementById('pause-banner').style.display = state.paused ? 'block' : 'none';

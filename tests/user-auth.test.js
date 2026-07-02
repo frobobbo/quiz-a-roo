@@ -401,6 +401,34 @@ async function main() {
     assert.ok(/rejoin-player'.*code/s.test(playerHtml));
   });
 
+  await test('server supports multiple simultaneous games by game code', () => {
+    assert.ok(/const games = new Map\(\)/.test(serverSrc));
+    assert.ok(/function createGame\(\)/.test(serverSrc));
+    assert.ok(/socket\.join\(`game:\$\{g\.code\}`\)/.test(serverSrc));
+    assert.ok(/io\.to\(`game:\$\{game\.code\}`\)\.emit\('game-state'/.test(serverSrc));
+    assert.ok(/io\.to\(`host:\$\{game\.code\}`\)\.emit\('host-state'/.test(serverSrc));
+  });
+
+  await test('board page joins by code and runs AI host intro/category presentations', () => {
+    assert.ok(/join-board', \{ code: initialCode \}/.test(boardHtml));
+    assert.ok(/id="host-presentation"/.test(boardHtml));
+    assert.ok(/Welcome to Quiz-a-roo!!/.test(boardHtml));
+    assert.ok(/announceRoundCategories/.test(boardHtml));
+    assert.ok(/ROUND \$\{state\.round \|\| 1\} CATEGORY/.test(boardHtml));
+  });
+
+  await test('QR/player URL also exposes a matching board URL', () => {
+    assert.ok(/function boardUrl/.test(serverSrc));
+    assert.ok(/\/board\?code=/.test(serverSrc));
+    assert.ok(/boardUrl: board/.test(serverSrc));
+  });
+
+  await test('host page rejoins the same game code after reconnects', () => {
+    assert.ok(/let currentHostGameCode = null/.test(hostHtml));
+    assert.ok(/join-host', \{ code: currentHostGameCode \}/.test(hostHtml));
+    assert.ok(/currentHostGameCode = code/.test(hostHtml));
+  });
+
   // --- summary ---
 
   console.log(`\n${passed} passed, ${failed} failed`);

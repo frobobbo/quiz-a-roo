@@ -1150,7 +1150,8 @@
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
-  socket.on('connect', () => socket.emit('join-host'));
+  let currentHostGameCode = null;
+  socket.on('connect', () => socket.emit('join-host', { code: currentHostGameCode }));
   socket.on('host-auth-error', msg => {
     alert(msg || 'Host access requires login.');
     window.location.href = '/login?next=host';
@@ -1159,7 +1160,10 @@
   socket.on('player-url', ({ qr, url, code }) => {
     const img = document.getElementById('qr-img');
     if (qr) { img.src = qr; img.style.display = 'block'; } else img.style.display = 'none';
-    if (code) document.getElementById('game-code-display').textContent = code;
+    if (code) {
+      currentHostGameCode = code;
+      document.getElementById('game-code-display').textContent = code;
+    }
     if (url) document.getElementById('join-url-display').textContent = url;
   });
 
