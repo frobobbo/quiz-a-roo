@@ -715,9 +715,38 @@
   let activeTimerEndsAt = null;
   let lastTTSKey = null;
   let ttsSource  = null;
+  let ttsQueue = Promise.resolve();
 
   function stopTTS() {
     if (ttsSource) { try { ttsSource.stop(); } catch(e) {} ttsSource = null; }
+  }
+
+  function playTTSText(text) {
+    if (!state?.ttsEnabled || !text) return Promise.resolve();
+    return fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).then(res => {
+      if (!res.ok || res.status === 204) return null;
+      return res.arrayBuffer();
+    }).then(buffer => {
+      if (!buffer) return null;
+      const ctx = getAudioCtx();
+      return ctx.resume().then(() => ctx.decodeAudioData(buffer)).then(audioBuffer => new Promise(resolve => {
+        const src = ctx.createBufferSource();
+        src.buffer = audioBuffer;
+        src.connect(ctx.destination);
+        ttsSource = src;
+        src.onended = () => { if (ttsSource === src) ttsSource = null; resolve(); };
+        src.start();
+      }));
+    }).catch(() => null);
+  }
+
+  function enqueueTTS(text) {
+    if (!state?.ttsEnabled || !text) return;
+    ttsQueue = ttsQueue.then(() => playTTSText(text)).catch(() => null);
   }
 
   function speakQuestion(q) {
@@ -796,24 +825,7 @@
   }
 
   function speakText(text) {
-    if (!state?.ttsEnabled || !text) return;
-    fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    }).then(res => {
-      if (!res.ok || res.status === 204) return null;
-      return res.arrayBuffer();
-    }).then(buffer => {
-      if (!buffer) return;
-      const ctx = getAudioCtx();
-      return ctx.resume().then(() => ctx.decodeAudioData(buffer)).then(audioBuffer => {
-        const src = ctx.createBufferSource();
-        src.buffer = audioBuffer;
-        src.connect(ctx.destination);
-        src.start();
-      });
-    }).catch(() => {});
+    enqueueTTS(text);
   }
 
   function showHostPresentation({ kicker, main, logo = false, duration = 3200 }) {
@@ -834,7 +846,7 @@
     announcedRounds.add(roundKey);
     const names = state.categories.map(c => c.name).filter(Boolean);
     if (!names.length) return;
-    speakText(`Round ${state.round || 1} categories are: ${names.join(', ')}.`);
+    enqueueTTS(`Round ${state.round || 1} categories are: ${names.join(', ')}.`);
     names.slice(0, 8).forEach((name, i) => {
       setTimeout(() => showHostPresentation({ kicker: `ROUND ${state.round || 1} CATEGORY`, main: name, duration: 1800 }), i * 1750);
     });
@@ -844,7 +856,7 @@
     if (!state || state.phase === 'lobby') return;
     if (announcedWelcomeForCode !== state.code) {
       announcedWelcomeForCode = state.code;
-      speakText('Welcome to Quiz-a-roo!!');
+      enqueueTTS('Welcome to Quiz-a-roo!!');
       showHostPresentation({ kicker: 'WELCOME TO', main: 'QUIZ-A-ROO!!', logo: true, duration: 3600 });
       setTimeout(announceRoundCategories, 3600);
       prevRound = state.round;

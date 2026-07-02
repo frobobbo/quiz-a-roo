@@ -425,6 +425,13 @@ async function main() {
     assert.ok(/ROUND \$\{state\.round \|\| 1\} CATEGORY/.test(boardHtml));
   });
 
+  await test('board page queues ElevenLabs voice for intro and category announcements', () => {
+    assert.ok(/function enqueueTTS\(text\)/.test(boardHtml));
+    assert.ok(/enqueueTTS\(`Round \$\{state\.round \|\| 1\} categories are:/.test(boardHtml));
+    assert.ok(/enqueueTTS\('Welcome to Quiz-a-roo!!'\)/.test(boardHtml));
+    assert.ok(/ttsQueue = ttsQueue\.then\(\(\) => playTTSText\(text\)\)/.test(boardHtml));
+  });
+
   await test('QR/player URL also exposes a matching board URL', () => {
     assert.ok(/function boardUrl/.test(serverSrc));
     assert.ok(/\/board\?code=/.test(serverSrc));
