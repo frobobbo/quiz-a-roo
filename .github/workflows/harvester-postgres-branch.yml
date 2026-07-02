@@ -2,8 +2,8 @@ name: Branch Harvester PostgreSQL Deploy
 
 on:
   push:
-    branches:
-      - feature/postgres-backend
+    branches-ignore:
+      - main
   workflow_dispatch:
     inputs:
       release_name:
@@ -142,7 +142,7 @@ jobs:
     name: Deploy branch to Harvester
     runs-on: harvester
     needs: [build-image]
-    if: github.ref == 'refs/heads/feature/postgres-backend' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref != 'refs/heads/main'
     permissions:
       contents: read
       packages: read
