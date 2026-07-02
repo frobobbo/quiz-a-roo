@@ -2,8 +2,11 @@ name: Branch Harvester PostgreSQL Deploy
 
 on:
   push:
-    branches:
-      - feature/postgres-backend
+    branches-ignore:
+      - 'main'
+  pull_request:
+    branches-ignore:
+      - 'main'
   workflow_dispatch:
     inputs:
       release_name:
