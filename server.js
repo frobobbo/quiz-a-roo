@@ -617,9 +617,10 @@ game.lockTimer = null;
 game.resultSaved = false;
 games.set(game.code, game);
 
-function createGame() {
+function createGame(hostUserId = null) {
   const next = freshState();
   while (games.has(next.code)) next.code = generateGameCode();
+  next.hostUserId = hostUserId;
   next.gameTimer = null;
   next.lockTimer = null;
   next.resultSaved = false;
@@ -1120,7 +1121,13 @@ io.on('connection', socket => {
     if (!user) { socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.'); return; }
     socket.data.user = user;
     const requested = getGame(code || socket.handshake?.query?.code);
-    const target = requested || createGame();
+    let target = requested;
+    if (requested && requested.hostUserId && requested.hostUserId !== user.id) {
+      socket.emit('game-error', 'That game code belongs to another host. Created a new game for you.');
+      target = null;
+    }
+    target = target || createGame(user.id);
+    if (!target.hostUserId) target.hostUserId = user.id;
     setSocketGame(socket, target);
     socket.join('host');
     socket.join(`host:${target.code}`);

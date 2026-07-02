@@ -403,10 +403,18 @@ async function main() {
 
   await test('server supports multiple simultaneous games by game code', () => {
     assert.ok(/const games = new Map\(\)/.test(serverSrc));
-    assert.ok(/function createGame\(\)/.test(serverSrc));
+    assert.ok(/function createGame\(hostUserId = null\)/.test(serverSrc));
     assert.ok(/socket\.join\(`game:\$\{g\.code\}`\)/.test(serverSrc));
     assert.ok(/io\.to\(`game:\$\{game\.code\}`\)\.emit\('game-state'/.test(serverSrc));
     assert.ok(/io\.to\(`host:\$\{game\.code\}`\)\.emit\('host-state'/.test(serverSrc));
+  });
+
+  await test('server binds hosted games to the owning host user', () => {
+    assert.ok(/next\.hostUserId = hostUserId/.test(serverSrc));
+    assert.ok(/requested\.hostUserId && requested\.hostUserId !== user\.id/.test(serverSrc));
+    assert.ok(/That game code belongs to another host/.test(serverSrc));
+    assert.ok(/target = target \|\| createGame\(user\.id\)/.test(serverSrc));
+    assert.ok(/target\.hostUserId = user\.id/.test(serverSrc));
   });
 
   await test('board page joins by code and runs AI host intro/category presentations', () => {
@@ -424,9 +432,24 @@ async function main() {
   });
 
   await test('host page rejoins the same game code after reconnects', () => {
-    assert.ok(/let currentHostGameCode = null/.test(hostHtml));
+    assert.ok(/HOST_GAME_CODE_KEY/.test(hostHtml));
+    assert.ok(/localStorage\.getItem\(HOST_GAME_CODE_KEY\)/.test(hostHtml));
     assert.ok(/join-host', \{ code: currentHostGameCode \}/.test(hostHtml));
+    assert.ok(/localStorage\.setItem\(HOST_GAME_CODE_KEY, code\)/.test(hostHtml));
     assert.ok(/currentHostGameCode = code/.test(hostHtml));
+  });
+
+  await test('host page links directly to the current game board code', () => {
+    assert.ok(/id="board-url-link"/.test(hostHtml));
+    assert.ok(/\/board\?code=\$\{encodeURIComponent\(code\)\}/.test(hostHtml));
+    assert.ok(/Open This Game Board/.test(hostHtml));
+  });
+
+  await test('player value picker stays open and emits dollar selection', () => {
+    assert.ok(/currentScreen === 'val-screen'/.test(playerHtml));
+    assert.ok(/renderValScreen\(player, selectedCatIndex\)/.test(playerHtml));
+    assert.ok(/btn\.disabled = true/.test(playerHtml));
+    assert.ok(/select-question', \{ categoryIndex: catIndex, questionIndex: qi \}/.test(playerHtml));
   });
 
   // --- summary ---

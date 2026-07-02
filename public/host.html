@@ -533,6 +533,7 @@
           <div class="section-title" style="margin-bottom:4px">Game Code</div>
           <div id="game-code-display" style="font-family:monospace;font-size:28px;font-weight:bold;letter-spacing:8px;color:var(--gold)">––––</div>
           <div id="join-url-display" style="margin-top:8px;font-size:11px;line-height:1.35;color:rgba(255,255,255,.42);word-break:break-all"></div>
+          <a id="board-url-link" class="btn btn-gray btn-sm" href="/board" target="_blank" rel="noopener" style="display:none;margin-top:10px;justify-content:center;text-decoration:none;width:100%">🖥 Open This Game Board</a>
         </div>
       </div>
 
@@ -1150,7 +1151,8 @@
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
-  let currentHostGameCode = null;
+  const HOST_GAME_CODE_KEY = 'quiz_a_roo_host_game_code';
+  let currentHostGameCode = new URLSearchParams(location.search).get('code') || localStorage.getItem(HOST_GAME_CODE_KEY) || null;
   socket.on('connect', () => socket.emit('join-host', { code: currentHostGameCode }));
   socket.on('host-auth-error', msg => {
     alert(msg || 'Host access requires login.');
@@ -1162,7 +1164,12 @@
     if (qr) { img.src = qr; img.style.display = 'block'; } else img.style.display = 'none';
     if (code) {
       currentHostGameCode = code;
+      localStorage.setItem(HOST_GAME_CODE_KEY, code);
       document.getElementById('game-code-display').textContent = code;
+      const boardUrl = `/board?code=${encodeURIComponent(code)}`;
+      const boardLink = document.getElementById('board-url-link');
+      boardLink.href = boardUrl;
+      boardLink.style.display = 'inline-flex';
     }
     if (url) document.getElementById('join-url-display').textContent = url;
   });

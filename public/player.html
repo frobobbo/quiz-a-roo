@@ -787,8 +787,12 @@
 
       case 'selecting':
         if (player.isCurrentTurn) {
-          renderCatScreen(player);
+          const selectedCat = Number.isInteger(selectedCatIndex) ? state.categories[selectedCatIndex] : null;
+          const canKeepValuePicker = currentScreen === 'val-screen' && selectedCat && selectedCat.questions.some(q => !q.used);
+          if (canKeepValuePicker) renderValScreen(player, selectedCatIndex);
+          else renderCatScreen(player);
         } else {
+          selectedCatIndex = null;
           setText('other-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
           setText('other-score', fmt(myScore()));
           setText('other-picker', currentTurnName());
@@ -1047,6 +1051,7 @@
     setText('val-score', fmt(myScore()));
 
     const cat = state.categories[catIndex];
+    if (!cat) { selectedCatIndex = null; renderCatScreen(player); return; }
     setText('val-cat-name', cat.name);
 
     const list = document.getElementById('val-list');
@@ -1058,6 +1063,7 @@
       btn.textContent = `$${q.value}`;
       if (!q.used) {
         btn.addEventListener('click', () => {
+          btn.disabled = true;
           socket.emit('select-question', { categoryIndex: catIndex, questionIndex: qi });
         });
       }
