@@ -405,7 +405,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
-  socket.emit('join-host');
+  socket.emit('join-host', { code: localStorage.getItem('quiz_a_roo_host_game_code') || null });
 
   const THEMES = [
     { id: 'classic',  label: 'quiz-a-roo', main: '#051447', accent: '#ffb21a' },

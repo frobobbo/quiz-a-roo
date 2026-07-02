@@ -423,7 +423,8 @@ async function main() {
     assert.ok(/next\.hostUserId = hostUserId/.test(serverSrc));
     assert.ok(/requested\.hostUserId && requested\.hostUserId !== user\.id/.test(serverSrc));
     assert.ok(/That game code belongs to another host/.test(serverSrc));
-    assert.ok(/target = target \|\| createGame\(user\.id\)/.test(serverSrc));
+    assert.ok(/games\.values\(\)\]\.reverse\(\)\.find\(g => g\.hostUserId === user\.id\)/.test(serverSrc));
+    assert.ok(/createGame\(user\.id\)/.test(serverSrc));
     assert.ok(/target\.hostUserId = user\.id/.test(serverSrc));
   });
 
