@@ -126,6 +126,7 @@ jobs:
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA::7}"
           IMAGE_TAG="sha-${SHORT_SHA}"
+          DATA_PVC="${RELEASE_NAME}-data"
 
           if helm status "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
             REUSE_ARGS=(--reuse-values)
@@ -133,12 +134,31 @@ jobs:
             REUSE_ARGS=()
           fi
 
-          helm upgrade --install "$RELEASE_NAME" ./charts/quiz-a-roo \
-            --namespace "$NAMESPACE" \
-            "${REUSE_ARGS[@]}" \
-            --set image.repository="$IMAGE_REPOSITORY" \
-            --set image.tag="$IMAGE_TAG" \
-            --wait --timeout 10m
+          deletion_ts="$(kubectl get pvc "$DATA_PVC" -n "$NAMESPACE" -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null || true)"
+          if [ -n "$deletion_ts" ]; then
+            echo "PVC $DATA_PVC is still terminating from a previous deploy; waiting for deletion before Helm install."
+            kubectl wait --for=delete "pvc/$DATA_PVC" -n "$NAMESPACE" --timeout=3m
+          fi
+
+          for attempt in 1 2; do
+            if helm upgrade --install "$RELEASE_NAME" ./charts/quiz-a-roo \
+              --namespace "$NAMESPACE" \
+              "${REUSE_ARGS[@]}" \
+              --set image.repository="$IMAGE_REPOSITORY" \
+              --set image.tag="$IMAGE_TAG" \
+              --wait --timeout 10m; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              exit 1
+            fi
+            echo "Helm deploy failed; checking for transient PVC deletion race before retry."
+            deletion_ts="$(kubectl get pvc "$DATA_PVC" -n "$NAMESPACE" -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null || true)"
+            if [ -n "$deletion_ts" ]; then
+              kubectl wait --for=delete "pvc/$DATA_PVC" -n "$NAMESPACE" --timeout=3m
+            fi
+            sleep 15
+          done
 
       - name: Verify rollout
         run: |
