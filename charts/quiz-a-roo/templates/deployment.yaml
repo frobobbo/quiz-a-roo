@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         {{- include "quiz-a-roo.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: app
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
