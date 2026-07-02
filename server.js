@@ -1101,9 +1101,19 @@ io.on('connection', socket => {
 
   socket.use((packet, next) => {
     const eventName = packet?.[0];
-    if (HOST_ONLY_EVENTS.has(eventName) && !isHostSocket(socket)) {
-      socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.');
-      return next(new Error('Host access required'));
+    if (HOST_ONLY_EVENTS.has(eventName)) {
+      if (!isHostSocket(socket)) {
+        socket.emit('host-auth-error', 'Host access requires a Host or Site Admin login.');
+        return next(new Error('Host access required'));
+      }
+      // Role alone isn't enough: the socket must have joined this game via
+      // join-host (which enforces hostUserId), or it could rebind to another
+      // host's game through the unauthenticated join-board event.
+      const target = socketGame(socket);
+      if (!io.sockets.adapter.rooms.get(`host:${target.code}`)?.has(socket.id)) {
+        socket.emit('game-error', 'You are not the host of this game.');
+        return next(new Error('Host access required'));
+      }
     }
     next();
   });
@@ -1126,7 +1136,10 @@ io.on('connection', socket => {
       socket.emit('game-error', 'That game code belongs to another host. Created a new game for you.');
       target = null;
     }
-    target = target || createGame(user.id);
+    // Without a valid code, reattach to a game this user already hosts
+    // (e.g. the settings page or a reconnect without localStorage) before
+    // creating a fresh one.
+    target = target || [...games.values()].reverse().find(g => g.hostUserId === user.id) || createGame(user.id);
     if (!target.hostUserId) target.hostUserId = user.id;
     setSocketGame(socket, target);
     socket.join('host');
@@ -2178,13 +2191,13 @@ JSON format (return exactly this structure, no extra text):
     if (!VALID_THEMES.includes(theme)) return;
     game.theme = theme;
     game.customThemeVars = null;
-    io.emit('game-state', publicState());
+    broadcast();
   });
 
   socket.on('set-custom-theme', ({ vars }) => {
     game.customThemeVars = vars;
     game.theme = 'custom';
-    io.emit('game-state', publicState());
+    broadcast();
   });
 
   socket.on('use-power-up', ({ type }) => {
@@ -2436,10 +2449,16 @@ JSON format (return exactly this structure, no extra text):
   });
 
   socket.on('disconnect', () => {
-    if (game.phase === 'lobby') {
-      game.players = game.players.filter(p => p.id !== socket.id);
-      broadcast();
-    }
+    // socket.use middleware only runs for incoming packets, not disconnects,
+    // so resolve this socket's game explicitly instead of trusting `game`.
+    const target = getGame(socket.data.gameCode);
+    if (!target) return;
+    withGame(target, () => {
+      if (game.phase === 'lobby') {
+        game.players = game.players.filter(p => p.id !== socket.id);
+        broadcast();
+      }
+    });
   });
 });
 

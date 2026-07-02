@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>quiz-a-roo — Settings</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -405,7 +410,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
-  socket.emit('join-host');
+  socket.emit('join-host', { code: localStorage.getItem('quiz_a_roo_host_game_code') || null });
 
   const THEMES = [
     { id: 'classic',  label: 'quiz-a-roo', main: '#051447', accent: '#ffb21a' },
