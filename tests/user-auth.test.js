@@ -426,13 +426,21 @@ async function main() {
   });
 
   await test('board page queues ElevenLabs voice for intro and category announcements', () => {
-    assert.ok(/function enqueueTTS\(text\)/.test(boardHtml));
+    assert.ok(/function enqueueTTS\(text, onStart\)/.test(boardHtml));
     assert.ok(/enqueueTTS\(`Round \$\{state\.round \|\| 1\} categories are:/.test(boardHtml));
-    assert.ok(/enqueueTTS\('Welcome to Quiz-a-roo!!'\)/.test(boardHtml));
-    assert.ok(/ttsQueue = ttsQueue\.then\(\(\) => playTTSText\(text\)\)/.test(boardHtml));
+    assert.ok(/enqueueTTS\('Welcome to Quiz-a-roo!!', \(\) => showHostPresentation/.test(boardHtml));
+    assert.ok(/ttsQueue = ttsQueue\.then\(\(\) => \{[\s\S]*return playTTSText\(text\);[\s\S]*\}\)/.test(boardHtml));
   });
 
-  await test('QR/player URL also exposes a matching board URL', () => {
+  await test('board page syncs category card changes to spoken category names', () => {
+    assert.ok(/function enqueueTTS\(text, onStart\)/.test(boardHtml));
+    assert.ok(/if \(typeof onStart === 'function'\) onStart\(\)/.test(boardHtml));
+    assert.ok(/enqueueTTS\(name, \(\) => showHostPresentation/.test(boardHtml));
+    assert.ok(/if \(!state\?\.ttsEnabled\) \{[\s\S]*setTimeout\(\(\) => showHostPresentation/.test(boardHtml));
+    assert.ok(/if \(state\?\.ttsEnabled\) welcomeDone\.then\(announceRoundCategories\)/.test(boardHtml));
+  });
+
+  await test('host page exposes current game board link with game code', () => {
     assert.ok(/function boardUrl/.test(serverSrc));
     assert.ok(/\/board\?code=/.test(serverSrc));
     assert.ok(/boardUrl: board/.test(serverSrc));

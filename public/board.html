@@ -744,9 +744,17 @@
     }).catch(() => null);
   }
 
-  function enqueueTTS(text) {
-    if (!state?.ttsEnabled || !text) return;
-    ttsQueue = ttsQueue.then(() => playTTSText(text)).catch(() => null);
+  function enqueueTTS(text, onStart) {
+    if (!text) return Promise.resolve();
+    if (!state?.ttsEnabled) {
+      if (typeof onStart === 'function') onStart();
+      return Promise.resolve();
+    }
+    ttsQueue = ttsQueue.then(() => {
+      if (typeof onStart === 'function') onStart();
+      return playTTSText(text);
+    }).catch(() => null);
+    return ttsQueue;
   }
 
   function speakQuestion(q) {
@@ -846,9 +854,15 @@
     announcedRounds.add(roundKey);
     const names = state.categories.map(c => c.name).filter(Boolean);
     if (!names.length) return;
-    enqueueTTS(`Round ${state.round || 1} categories are: ${names.join(', ')}.`);
-    names.slice(0, 8).forEach((name, i) => {
-      setTimeout(() => showHostPresentation({ kicker: `ROUND ${state.round || 1} CATEGORY`, main: name, duration: 1800 }), i * 1750);
+    if (!state?.ttsEnabled) {
+      names.slice(0, 8).forEach((name, i) => {
+        setTimeout(() => showHostPresentation({ kicker: `ROUND ${state.round || 1} CATEGORY`, main: name, duration: 1800 }), i * 1750);
+      });
+      return;
+    }
+    enqueueTTS(`Round ${state.round || 1} categories are:`, () => showHostPresentation({ kicker: `ROUND ${state.round || 1}`, main: 'CATEGORIES', duration: 2200 }));
+    names.slice(0, 8).forEach(name => {
+      enqueueTTS(name, () => showHostPresentation({ kicker: `ROUND ${state.round || 1} CATEGORY`, main: name, duration: 2600 }));
     });
   }
 
@@ -856,9 +870,9 @@
     if (!state || state.phase === 'lobby') return;
     if (announcedWelcomeForCode !== state.code) {
       announcedWelcomeForCode = state.code;
-      enqueueTTS('Welcome to Quiz-a-roo!!');
-      showHostPresentation({ kicker: 'WELCOME TO', main: 'QUIZ-A-ROO!!', logo: true, duration: 3600 });
-      setTimeout(announceRoundCategories, 3600);
+      const welcomeDone = enqueueTTS('Welcome to Quiz-a-roo!!', () => showHostPresentation({ kicker: 'WELCOME TO', main: 'QUIZ-A-ROO!!', logo: true, duration: 3600 }));
+      if (state?.ttsEnabled) welcomeDone.then(announceRoundCategories);
+      else setTimeout(announceRoundCategories, 3600);
       prevRound = state.round;
       return;
     }
