@@ -77,6 +77,14 @@
       text-shadow: 0 4px 12px rgba(0,0,0,0.6);
     }
 
+    .lobby-logo {
+      display: block;
+      width: clamp(260px, 42vw, 620px);
+      height: auto;
+      border-radius: 24px;
+      box-shadow: 0 0 46px rgba(255,178,26,.28), 0 8px 22px rgba(0,0,0,.55);
+    }
+
     .join-box {
       background: var(--dark);
       border: 3px solid var(--gold);
@@ -568,7 +576,7 @@
 
 <!-- LOBBY -->
 <div id="lobby">
-  <h1>quiz-a-roo</h1>
+  <img class="lobby-logo" src="/assets/quiz-a-roo-logo.jpg" alt="quiz-a-roo">
   <div class="join-box">
     <div class="qr-wrap"><img id="qr-img" src="" alt="QR Code"></div>
     <div class="label">Scan to join on your phone</div>

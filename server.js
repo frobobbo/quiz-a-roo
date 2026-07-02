@@ -1078,7 +1078,7 @@ const HOST_ONLY_EVENTS = new Set([
   'reset-played-categories', 'deactivate-all-categories', 'reset-library', 'remove-player',
   'set-category-round', 'set-category-page', 'add-page', 'rename-page', 'delete-page',
   'switch-page', 'start-game', 'start-round2', 'reveal-final-question', 'judge-final',
-  'select-question', 'host-select-question', 'judge-answer', 'host-pick-dd-player',
+  'host-select-question', 'judge-answer', 'host-pick-dd-player',
   'update-settings', 'toggle-game-mode', 'judge-all-play', 'finish-all-play',
   'duplicate-category', 'import-library', 'import-csv-questions', 'create-library',
   'switch-library', 'delete-library', 'rename-library', 'skip-question',

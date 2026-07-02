@@ -395,6 +395,16 @@ async function main() {
     assert.ok(/player-url'.*code/s.test(boardHtml));
   });
 
+  await test('entry screens use quiz-a-roo logo artwork instead of text-only branding', () => {
+    for (const [name, html] of [['login', loginHtml], ['player', playerHtml], ['host', hostHtml], ['board', boardHtml]]) {
+      assert.ok(/src="\/assets\/quiz-a-roo-logo\.jpg"/.test(html), `${name} page should render the logo artwork`);
+    }
+    assert.ok(/class="brand-logo/.test(loginHtml));
+    assert.ok(/class="brand-logo/.test(playerHtml));
+    assert.ok(/class="host-logo/.test(hostHtml));
+    assert.ok(/class="lobby-logo/.test(boardHtml));
+  });
+
   await test('player page accepts game code and sends it when joining', () => {
     assert.ok(/id="join-code"/.test(playerHtml));
     assert.ok(/join-player'.*code/s.test(playerHtml));
@@ -465,6 +475,9 @@ async function main() {
     assert.ok(/renderValScreen\(player, selectedCatIndex\)/.test(playerHtml));
     assert.ok(/btn\.disabled = true/.test(playerHtml));
     assert.ok(/select-question', \{ categoryIndex: catIndex, questionIndex: qi \}/.test(playerHtml));
+    const hostOnlyBody = (serverSrc.match(/const HOST_ONLY_EVENTS = new Set\(\[([\s\S]*?)\]\);/) || [,''])[1];
+    assert.ok(!/'select-question'/.test(hostOnlyBody), 'player select-question must not be host-only');
+    assert.ok(/socket\.on\('select-question'[\s\S]*current\.id !== socket\.id/.test(serverSrc));
   });
 
   // --- summary ---

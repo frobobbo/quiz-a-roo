@@ -67,6 +67,9 @@
       z-index: 50;
     }
     header h1 { font-family: Impact, sans-serif; font-size: 20px; color: var(--gold); letter-spacing: 3px; flex: 1; }
+    .host-brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .host-logo { width: 150px; height: auto; border-radius: 8px; box-shadow: 0 0 14px rgba(255,178,26,.18); }
+    .host-brand-label { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,.46); text-transform: uppercase; white-space: nowrap; }
     .phase-badge { background: var(--dark); border: 1px solid var(--gold); border-radius: 20px; padding: 3px 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
 
     /* ── LAYOUT ── */
@@ -503,7 +506,7 @@
 <body>
 
 <header>
-  <h1>QUIZ-A-ROO — HOST</h1>
+  <div class="host-brand"><img class="host-logo" src="/assets/quiz-a-roo-logo.jpg" alt="quiz-a-roo"><span class="host-brand-label">HOST</span></div>
   <span class="phase-badge" id="phase-badge">LOBBY</span>
   <button id="history-btn" title="Game History" style="background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:6px;color:rgba(255,255,255,.45);padding:3px 9px;cursor:pointer;font-size:15px;line-height:1">📜</button>
   <a href="/settings" id="settings-link" title="Settings">⚙</a>
