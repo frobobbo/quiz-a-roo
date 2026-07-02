@@ -81,11 +81,24 @@ async function main() {
 
   _resetMemoryForTests();
 
-  await test('creates a new user and returns id', async () => {
+  await test('creates a new user as host by default', async () => {
     const u = await getOrCreateUser('testuser', 'pass1');
     assert.equal(u.username, 'testuser');
     assert.ok(typeof u.id === 'number');
-    assert.equal(u.role, 'site_admin');
+    assert.equal(u.role, 'host');
+  });
+
+  await test('bootstrap admin requires matching environment username and password', async () => {
+    _resetMemoryForTests();
+    process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_USERNAME = 'owner';
+    process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_PASSWORD = 'ownerpass';
+    const wrong = await getOrCreateUser('randomuser', 'pass1');
+    assert.equal(wrong.role, 'host');
+    _resetMemoryForTests();
+    const admin = await getOrCreateUser('owner', 'ownerpass');
+    assert.equal(admin.role, 'site_admin');
+    delete process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_USERNAME;
+    delete process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_PASSWORD;
   });
 
   await test('authenticates same user with correct password', async () => {
@@ -183,11 +196,12 @@ async function main() {
     assert.ok(/insert into users.*'default'/.test(migration.replace(/\n/g, ' ')));
   });
 
-  await test('role migration adds roles and site settings', () => {
+  await test('role migration adds roles and site settings without public admin promotion', () => {
     assert.ok(/add column if not exists role/.test(roleMigration));
     assert.ok(/site_admin/.test(roleMigration));
     assert.ok(/create table if not exists site_settings/.test(roleMigration));
     assert.ok(/registrationEnabled/.test(roleMigration));
+    assert.ok(!/first_real_user/.test(roleMigration));
   });
 
   await test('migration adds user_id to libraries', () => {
@@ -308,6 +322,27 @@ async function main() {
     assert.ok(/historyRepo\.loadHistory\(50, userId\)/.test(serverSrc));
     assert.ok(/libraryRepo\.listLibraries\(userId\)/.test(serverSrc));
     assert.ok(/historyRepo\.clearHistory\(activeUserId\)/.test(serverSrc));
+  });
+
+  await test('server prevents concurrent host users from switching global runtime state', () => {
+    assert.ok(/function hasActiveHostSessionForOtherUser/.test(serverSrc));
+    assert.ok(/async function activateHostUser/.test(serverSrc));
+    assert.ok(/Another host is already active/.test(serverSrc));
+    assert.ok(/409/.test(serverSrc));
+  });
+
+  await test('server preserves Spotify settings from current main', () => {
+    assert.ok(/SPOTIFY_CLIENT_ID/.test(serverSrc));
+    assert.ok(/SPOTIFY_CLIENT_SECRET/.test(serverSrc));
+    assert.ok(/_spotifyToken = null/.test(serverSrc));
+    assert.ok(/settingsRepo\.saveConfig\(cfg\)/.test(serverSrc));
+  });
+
+  await test('server startup preserves async user loading and ElevenLabs warmup', () => {
+    assert.ok(/async function main\(\)/.test(serverSrc));
+    assert.ok(/siteRepo\.loadSiteSettings\(\)/.test(serverSrc));
+    assert.ok(/await loadUserState\(1\)/.test(serverSrc));
+    assert.ok(/api\.elevenlabs\.io/.test(serverSrc));
   });
 
   await test('login form posts relatively for proxy compatibility', () => {

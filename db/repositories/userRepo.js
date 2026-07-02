@@ -57,6 +57,17 @@ function publicUser(user) {
   return { id: user.id, username: user.username, role: normalizeRole(user.role), active: user.active !== false };
 }
 
+function bootstrapAdminConfigured() {
+  return !!(process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_USERNAME && process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_PASSWORD);
+}
+
+function isBootstrapAdminCredentials(username, password) {
+  if (!bootstrapAdminConfigured()) return false;
+  const configuredUsername = normalizeUsername(process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_USERNAME);
+  const configuredPassword = process.env.QUIZ_A_ROO_BOOTSTRAP_ADMIN_PASSWORD;
+  return normalizeUsername(username) === configuredUsername && password === configuredPassword;
+}
+
 function _resetMemoryForTests() {
   memUsers = new Map();
   memSessions = new Map();
@@ -78,7 +89,7 @@ async function getOrCreateUser(username, password) {
     }
     const passwordHash = await hashPassword(password);
     const id = memNextId++;
-    const role = memUsers.size === 0 ? 'site_admin' : 'host';
+    const role = isBootstrapAdminCredentials(u, password) && ![...memUsers.values()].some(user => user.role === 'site_admin') ? 'site_admin' : 'host';
     const user = { id, username: u, passwordHash, role, active: true };
     memUsers.set(u, user);
     return publicUser(user);
@@ -94,8 +105,9 @@ async function getOrCreateUser(username, password) {
     return publicUser({ id: row.id, username: row.username || u, role: row.role, active: row.active });
   }
   const passwordHash = await hashPassword(password);
-  const roleRes = await query("SELECT COUNT(*)::int AS count FROM users WHERE username <> 'default'", []);
-  const role = Number(roleRes.rows[0]?.count || 0) === 0 ? 'site_admin' : 'host';
+  const adminRes = await query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'site_admin' AND username <> 'default'", []);
+  const hasRealAdmin = Number(adminRes.rows[0]?.count || 0) > 0;
+  const role = !hasRealAdmin && isBootstrapAdminCredentials(u, password) ? 'site_admin' : 'host';
   const result = await query(
     'INSERT INTO users (username, password_hash, role, active) VALUES ($1, $2, $3, true) RETURNING id, username, role, active',
     [u, passwordHash, role]
@@ -234,6 +246,7 @@ module.exports = {
   normalizeRole,
   hashPassword,
   verifyPassword,
+  isBootstrapAdminCredentials,
   getOrCreateUser,
   getUserById,
   userExists,

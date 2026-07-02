@@ -40,6 +40,89 @@ const https = require('https');
 let apiKey = config.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
 let anthropic = apiKey ? new Anthropic({ apiKey, httpAgent: new https.Agent({ rejectUnauthorized: false }) }) : null;
 let elevenLabsKey = config.ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY || '';
+const elevenLabsAgent = new https.Agent({ keepAlive: true, maxSockets: 4, rejectUnauthorized: false });
+let spotifyClientId     = config.SPOTIFY_CLIENT_ID     || '';
+let spotifyClientSecret = config.SPOTIFY_CLIENT_SECRET || '';
+let _spotifyToken = null, _spotifyTokenExpiry = 0;
+
+function getSpotifyToken() {
+  if (_spotifyToken && Date.now() < _spotifyTokenExpiry - 60000) return Promise.resolve(_spotifyToken);
+  if (!spotifyClientId || !spotifyClientSecret) return Promise.reject(new Error('Spotify credentials not configured. Add them in Settings.'));
+  const creds = Buffer.from(`${spotifyClientId}:${spotifyClientSecret}`).toString('base64');
+  const body  = 'grant_type=client_credentials';
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'accounts.spotify.com', path: '/api/token', method: 'POST',
+      rejectUnauthorized: false,
+      headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },
+    }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        try {
+          const d = JSON.parse(Buffer.concat(chunks).toString());
+          if (!d.access_token) return reject(new Error('Spotify auth failed — check Client ID / Secret.'));
+          _spotifyToken = d.access_token;
+          _spotifyTokenExpiry = Date.now() + (d.expires_in || 3600) * 1000;
+          resolve(_spotifyToken);
+        } catch (e) { reject(e); }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function searchSpotifyTracks(query, limit = 50) {
+  return getSpotifyToken().then(token => new Promise((resolve, reject) => {
+    const path = `/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}&market=US`;
+    const req = https.request({
+      hostname: 'api.spotify.com', path, method: 'GET',
+      rejectUnauthorized: false,
+      headers: { 'Authorization': `Bearer ${token}` },
+    }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString()).tracks?.items || []); }
+        catch (e) { reject(e); }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Spotify search timed out.')); });
+    req.end();
+  }));
+}
+
+function searchDeezerTracks(query, limit = 50) {
+  return new Promise((resolve, reject) => {
+    const reqPath = `/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+    const req = https.request({
+      hostname: 'api.deezer.com', path: reqPath, method: 'GET',
+      rejectUnauthorized: false,
+    }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString());
+          resolve((data.data || []).filter(t => t.preview).map(t => ({
+            name: t.title,
+            artists: [{ name: t.artist?.name || '' }],
+            preview_url: t.preview,
+          })));
+        } catch (e) { reject(e); }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Deezer search timed out.')); });
+    req.end();
+  });
+}
 
 const PORT = process.env.PORT || 3000;
 
@@ -152,18 +235,20 @@ function requireRole(roles) {
   return (req, res, next) => {
     getCurrentUser(req).then(async user => {
       if (!user || !allowed.includes(user.role)) return res.status(403).json({ error: 'Forbidden' });
-      if (user.id !== activeUserId && (user.role === 'host' || user.role === 'site_admin')) await loadUserState(user.id);
+      if (allowed.includes('host')) await activateHostUser(user);
       req.user = user;
       next();
-    }).catch(() => res.status(403).json({ error: 'Forbidden' }));
+    }).catch(err => {
+      if (/Another host is already active/.test(err.message || '')) return res.status(409).json({ error: err.message });
+      return res.status(403).json({ error: 'Forbidden' });
+    });
   };
 }
 
 async function getSocketUser(socket) {
   const user = await getCurrentUser({ headers: socket.request.headers || {} });
   if (!user || !['host', 'site_admin'].includes(user.role)) return null;
-  if (user.id !== activeUserId) await loadUserState(user.id);
-  return user;
+  return activateHostUser(user);
 }
 
 io.use(async (socket, next) => {
@@ -177,6 +262,27 @@ io.use(async (socket, next) => {
 
 // Active user id for process-global state (last logged-in host user).
 let activeUserId = 1;
+
+function hasActiveHostSessionForOtherUser(userId) {
+  const hostRoom = io.sockets.adapter.rooms.get('host');
+  if (!hostRoom) return false;
+  for (const socketId of hostRoom) {
+    const hostSocket = io.sockets.sockets.get(socketId);
+    const hostUserId = hostSocket?.data?.user?.id;
+    if (hostUserId && +hostUserId !== +userId) return true;
+  }
+  return false;
+}
+
+async function activateHostUser(user) {
+  if (!user || !['host', 'site_admin'].includes(user.role)) throw new Error('Host access requires a Host or Site Admin login.');
+  if (+user.id === +activeUserId) return user;
+  if (hasActiveHostSessionForOtherUser(user.id) || (activeUserId !== 1 && (game.phase !== 'lobby' || game.players.length > 0))) {
+    throw new Error('Another host is already active on this app instance. Finish that session or deploy a separate instance before switching users.');
+  }
+  await loadUserState(user.id);
+  return user;
+}
 
 async function loadUserState(userId) {
   activeUserId = userId;
@@ -206,7 +312,6 @@ app.post('/login', async (req, res) => {
     return res.redirect('login?error=invalid');
   }
   const token = await userRepo.createSession(user.id);
-  await loadUserState(user.id);
   const requested = req.query.next;
   const next = (requested === 'admin' && user.role === 'site_admin') ? 'admin' : (user.role === 'site_admin' ? 'admin' : 'host');
   res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
@@ -238,7 +343,12 @@ app.get('/host', async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.redirect('login?next=host');
   if (!['host', 'site_admin'].includes(user.role)) return res.status(403).send('Forbidden');
-  if (user.id !== activeUserId) await loadUserState(user.id);
+  try {
+    await activateHostUser(user);
+  } catch (err) {
+    if (/Another host is already active/.test(err.message || '')) return res.status(409).send(err.message);
+    return res.status(403).send('Forbidden');
+  }
   res.sendFile(path.join(__dirname, 'public', 'host.html'));
 });
 
@@ -345,21 +455,25 @@ app.get('/api/app-settings', requireHost, (req, res) => {
   const cfg = loadConfig();
   const key  = cfg.ANTHROPIC_API_KEY  || '';
   const elKey = cfg.ELEVENLABS_API_KEY || '';
+  const spId  = cfg.SPOTIFY_CLIENT_ID     || '';
+  const spSec = cfg.SPOTIFY_CLIENT_SECRET || '';
   res.json({
-    apiKeyConfigured:  !!key,
-    apiKeyPreview:     key  ? key.slice(0, 14)  + '…' + key.slice(-4)  : '',
-    elKeyConfigured:   !!elKey,
-    elKeyPreview:      elKey ? elKey.slice(0, 8) + '…' + elKey.slice(-4) : '',
-    gameDefaults:      appSettings.gameDefaults  || {},
-    defaultTheme:      appSettings.defaultTheme  || 'classic',
-    customThemeVars:   appSettings.customThemeVars || null,
-    tts:               appSettings.tts || {},
+    apiKeyConfigured:       !!key,
+    apiKeyPreview:          key   ? key.slice(0, 14)  + '…' + key.slice(-4)   : '',
+    elKeyConfigured:        !!elKey,
+    elKeyPreview:           elKey ? elKey.slice(0, 8) + '…' + elKey.slice(-4) : '',
+    spotifyConfigured:      !!(spId && spSec),
+    spotifyIdPreview:       spId  ? spId.slice(0, 6)  + '…'                   : '',
+    gameDefaults:           appSettings.gameDefaults   || {},
+    defaultTheme:           appSettings.defaultTheme   || 'classic',
+    customThemeVars:        appSettings.customThemeVars || null,
+    tts:                    appSettings.tts || {},
   });
 });
 
 app.post('/api/app-settings', requireHost, (req, res) => {
-  const { apiKey: newKey, elKey: newElKey, gameDefaults, defaultTheme, customThemeVars, tts } = req.body;
-  if (newKey !== undefined || newElKey !== undefined) {
+  const { apiKey: newKey, elKey: newElKey, spotifyClientId: newSpId, spotifyClientSecret: newSpSec, gameDefaults, defaultTheme, customThemeVars, tts } = req.body;
+  if (newKey !== undefined || newElKey !== undefined || newSpId !== undefined || newSpSec !== undefined) {
     const cfg = loadConfig();
     if (newKey !== undefined) {
       const trimmed = (newKey || '').trim();
@@ -371,6 +485,16 @@ app.post('/api/app-settings', requireHost, (req, res) => {
       const trimmed = (newElKey || '').trim();
       cfg.ELEVENLABS_API_KEY = trimmed;
       elevenLabsKey = trimmed;
+    }
+    if (newSpId !== undefined) {
+      spotifyClientId = (newSpId || '').trim();
+      cfg.SPOTIFY_CLIENT_ID = spotifyClientId;
+      _spotifyToken = null;
+    }
+    if (newSpSec !== undefined) {
+      spotifyClientSecret = (newSpSec || '').trim();
+      cfg.SPOTIFY_CLIENT_SECRET = spotifyClientSecret;
+      _spotifyToken = null;
     }
     try { settingsRepo.saveConfig(cfg); }
     catch (e) { return res.status(500).json({ error: 'Failed to save API key.' }); }
@@ -620,7 +744,7 @@ function publicState() {
     categories: game.categories.map(cat => ({
       name: cat.name,
       page: cat.page || 1,
-      questions: cat.questions.map(({ value, used }) => ({ value, used })),
+      questions: cat.questions.map(({ value, used, audioUrl }) => ({ value, used, ...(audioUrl ? { audioUrl } : {}) })),
     })),
     currentPage: game.currentPage || 1,
     pages: game.pages || [{ id: 1, name: 'Page 1' }],
@@ -630,6 +754,8 @@ function publicState() {
       value: game.currentQuestion.value,
       question: game.currentQuestion.question,
       answer: (game.phase === 'answer-reveal' || game.phase === 'all-play-review') ? game.currentQuestion.answer : undefined,
+      audioUrl:   game.currentQuestion.audioUrl   || undefined,
+      audioStart: game.currentQuestion.audioStart || undefined,
     } : null,
     buzzedPlayerId: game.buzzedPlayerId,
     buzzedPlayerName: game.buzzedPlayerId
@@ -650,6 +776,7 @@ function publicState() {
       : Object.fromEntries(game.players.map(p => [p.id, game.finalWagers[p.id] !== undefined])),
     finalJudged:        [...game.finalJudged],
     finalAnswersLocked: game.finalAnswersLocked,
+    finalAnswers: Object.fromEntries(Object.keys(game.finalAnswers).map(id => [id, true])),
     allPlayAnswers: game.phase === 'all-play-review'
       ? JSON.parse(JSON.stringify(game.allPlayAnswers))
       : Object.fromEntries(Object.entries(game.allPlayAnswers).map(([id, v]) => [id, { submitted: true, skipped: v.skipped }])),
@@ -873,7 +1000,7 @@ app.post('/api/tts', (req, res) => {
     hostname: 'api.elevenlabs.io',
     path: `/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
     method: 'POST',
-    rejectUnauthorized: false,
+    agent: elevenLabsAgent,
     headers: {
       'xi-api-key': elevenLabsKey,
       'Content-Type': 'application/json',
@@ -1044,7 +1171,9 @@ io.on('connection', socket => {
           value:    q.value    || 200,
           question: (q.question || '').trim(),
           answer:   (q.answer   || '').trim(),
-          enabled:  true
+          enabled:  true,
+          ...(q.audioUrl   ? { audioUrl:   q.audioUrl   } : {}),
+          ...(q.audioStart ? { audioStart: q.audioStart } : {}),
         }))
       });
     });
@@ -1109,7 +1238,7 @@ Return this exact JSON structure:
   });
 
   // update-question does NOT broadcast (keeps focus during typing)
-  socket.on('update-question', ({ catId, qIdx, question, answer, value }) => {
+  socket.on('update-question', ({ catId, qIdx, question, answer, value, audioUrl, audioStart }) => {
     if (game.phase !== 'lobby') return;
     const cat = lib.categories.find(c => c.id === catId);
     if (!cat?.questions[qIdx]) return;
@@ -1118,6 +1247,15 @@ Return this exact JSON structure:
     if (value   !== undefined) {
       const v = parseInt(value);
       if (!isNaN(v) && v > 0) cat.questions[qIdx].value = v;
+    }
+    if (audioUrl !== undefined) {
+      if (audioUrl) cat.questions[qIdx].audioUrl = audioUrl;
+      else delete cat.questions[qIdx].audioUrl;
+    }
+    if (audioStart !== undefined) {
+      const s = parseInt(audioStart);
+      if (!isNaN(s) && s > 0) cat.questions[qIdx].audioStart = s;
+      else delete cat.questions[qIdx].audioStart;
     }
     saveLibrary();
   });
@@ -1210,7 +1348,7 @@ JSON format (return exactly this structure, no extra text):
     if (game.phase !== 'lobby') return;
 
     // Eligible = has at least one complete, enabled question and hasn't been played yet
-    const hasContent = c => c.questions.some(q => q.question.trim() && q.answer.trim() && q.enabled !== false);
+    const hasContent = c => c.questions.some(q => (q.question.trim() || q.audioUrl) && q.answer.trim() && q.enabled !== false);
     let eligible = lib.categories.filter(c => hasContent(c) && !c.played);
     // If all categories have been played, fall back to the full pool
     if (eligible.length === 0) eligible = lib.categories.filter(hasContent);
@@ -1340,7 +1478,7 @@ JSON format (return exactly this structure, no extra text):
         ...cat,
         round: cat.round || 1,
         questions: cat.questions
-          .filter(q => q.question.trim() && q.answer.trim() && q.enabled !== false)
+          .filter(q => (q.question.trim() || q.audioUrl) && q.answer.trim() && q.enabled !== false)
           .sort((a, b) => a.value - b.value)
           .map(q => ({ ...q, used: false })),
       }))
@@ -1496,6 +1634,8 @@ JSON format (return exactly this structure, no extra text):
       categoryName: cat.name, categoryIndex, questionIndex,
       value: q.value, question: q.question, answer: q.answer,
       dailyDouble: q.dailyDouble || false,
+      ...(q.audioUrl   ? { audioUrl:   q.audioUrl   } : {}),
+      ...(q.audioStart ? { audioStart: q.audioStart } : {}),
     };
     game.lockedOutIds = [];
     game.allPlayAnswers = {};
@@ -2044,6 +2184,145 @@ JSON format (return exactly this structure, no extra text):
     }
   });
 
+  // ── Song Category Generation ─────────────────────────────────────────────
+
+  socket.on('generate-song-category', async ({ theme, count }) => {
+    const n = Math.min(Math.max(parseInt(count) || 1, 1), 5);
+    try {
+      const tracks = await searchDeezerTracks(theme, 100);
+
+      if (tracks.length < n * 5) {
+        socket.emit('gen-song-error', { message: `Only ${tracks.length} tracks with audio previews found for "${theme}". Try a broader theme.` });
+        return;
+      }
+
+      const shuffled = tracks.sort(() => Math.random() - 0.5);
+      const values = [200, 400, 600, 800, 1000];
+      const themeLabel = theme.toUpperCase().slice(0, 22);
+      const cats = [];
+      for (let i = 0; i < n; i++) {
+        cats.push({
+          name: `NAME THAT TUNE: ${themeLabel}${n > 1 ? ` (${i + 1})` : ''}`,
+          questions: values.map((val, j) => {
+            const t = shuffled[i * 5 + j];
+            return { value: val, question: '', answer: t.name, audioUrl: t.preview_url };
+          }),
+        });
+      }
+
+      socket.emit('gen-song-result', { categories: cats });
+    } catch (e) {
+      socket.emit('gen-song-error', { message: e.message || 'Song generation failed.' });
+    }
+  });
+
+  // ── AI Deduplication ──────────────────────────────────────────────────────
+
+  function buildDupeMap() {
+    function norm(s) {
+      return (s || '').toLowerCase().trim().replace(/[.,!?;:'"()\[\]]+/g, '').replace(/\s+/g, ' ');
+    }
+    const catMap = new Map();
+    for (const cat of lib.categories) {
+      const key = norm(cat.name);
+      if (!catMap.has(key)) catMap.set(key, []);
+      catMap.get(key).push(cat);
+    }
+    const dupeCatGroups = [...catMap.values()].filter(g => g.length > 1)
+      .map(g => [...g].sort((a, b) => (b.questions || []).length - (a.questions || []).length));
+
+    const qMap = new Map();
+    for (const cat of lib.categories) {
+      for (let qi = 0; qi < (cat.questions || []).length; qi++) {
+        const q = cat.questions[qi];
+        if (!q.question) continue;
+        const key = norm(q.question);
+        if (!qMap.has(key)) qMap.set(key, []);
+        qMap.get(key).push({ catId: cat.id, catName: cat.name, qi, question: q.question, answer: q.answer });
+      }
+    }
+    const dupeQGroups = [...qMap.values()].filter(g => g.length > 1);
+
+    return { dupeCatGroups, dupeQGroups, norm };
+  }
+
+  socket.on('ai-dedupe-delete', () => {
+    const { dupeCatGroups, dupeQGroups, norm } = buildDupeMap();
+
+    const catIdsToDelete = dupeCatGroups.flatMap(group => group.slice(1).map(c => c.id));
+    lib.categories = lib.categories.filter(c => !catIdsToDelete.includes(c.id));
+    lib.activeIds = lib.activeIds.filter(id => !catIdsToDelete.includes(id));
+
+    const qSeen = new Set();
+    let qRemoved = 0;
+    for (const cat of lib.categories) {
+      const before = (cat.questions || []).length;
+      cat.questions = (cat.questions || []).filter(q => {
+        const key = norm(q.question);
+        if (!key) return true;
+        if (qSeen.has(key)) return false;
+        qSeen.add(key);
+        return true;
+      });
+      qRemoved += before - cat.questions.length;
+    }
+
+    saveLibrary();
+    broadcastLibrary();
+    socket.emit('ai-dedupe-done', { deletedCategories: catIdsToDelete.length, deletedQuestions: qRemoved, type: 'delete' });
+  });
+
+  socket.on('ai-reword-dupes', async () => {
+    if (!anthropic) {
+      socket.emit('ai-dedupe-error', { message: 'Anthropic API not configured. Add your key in Settings.' });
+      return;
+    }
+    const { dupeCatGroups, dupeQGroups } = buildDupeMap();
+    if (dupeCatGroups.length === 0 && dupeQGroups.length === 0) {
+      socket.emit('ai-dedupe-done', { rewordedCategories: 0, rewordedQuestions: 0, type: 'reword' });
+      return;
+    }
+
+    const catTasks = dupeCatGroups.slice(0, 20).flatMap(group =>
+      group.slice(1).map(c => ({ id: c.id, currentName: c.name, keepName: group[0].name }))
+    );
+    const qTasks = dupeQGroups.slice(0, 20).flatMap(group =>
+      group.slice(1).map(entry => ({ catId: entry.catId, qi: entry.qi, currentQuestion: entry.question, answer: entry.answer, keepQuestion: group[0].question }))
+    );
+
+    const parts = [];
+    if (catTasks.length) parts.push(`RENAME THESE DUPLICATE CATEGORY NAMES (make each unique, keep the topic):\n${JSON.stringify(catTasks)}`);
+    if (qTasks.length) parts.push(`REWORD THESE JEOPARDY CLUES (keep the same answer, write a different clue):\n${JSON.stringify(qTasks)}`);
+    const prompt = parts.join('\n\n') + '\n\nReturn ONLY valid JSON: {"categories":[{"id":<id>,"newName":"..."}],"questions":[{"catId":<id>,"qi":<index>,"newQuestion":"..."}]}';
+
+    try {
+      const msg = await anthropic.messages.create({
+        model: 'claude-opus-4-8',
+        max_tokens: 4000,
+        system: 'You rename Jeopardy category names and rewrite Jeopardy clues to eliminate duplicates. Respond only with valid JSON, no markdown.',
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const raw = msg.content[0].text.trim().replace(/^```[^\n]*\n?/, '').replace(/```\s*$/, '');
+      const result = JSON.parse(raw);
+
+      let catCount = 0, qCount = 0;
+      for (const { id, newName } of (result.categories || [])) {
+        const cat = lib.categories.find(c => c.id === id);
+        if (cat && newName) { cat.name = String(newName).toUpperCase().slice(0, 60); catCount++; }
+      }
+      for (const { catId, qi, newQuestion } of (result.questions || [])) {
+        const cat = lib.categories.find(c => c.id === catId);
+        if (cat && cat.questions[qi] && newQuestion) { cat.questions[qi].question = String(newQuestion); qCount++; }
+      }
+
+      saveLibrary();
+      broadcastLibrary();
+      socket.emit('ai-dedupe-done', { rewordedCategories: catCount, rewordedQuestions: qCount, type: 'reword' });
+    } catch (e) {
+      socket.emit('ai-dedupe-error', { message: e.message || 'AI reword failed.' });
+    }
+  });
+
   socket.on('reset-game', () => {
     clearLockTimer();
     if (gameTimer) { clearTimeout(gameTimer); gameTimer = null; }
@@ -2095,6 +2374,17 @@ async function main() {
     console.log(`  Player (phone): ${localBase}/player?code=${game.code}`);
     console.log(`  Game Code:      ${game.code}`);
     console.log('  ─────────────────────────────────────────\n');
+
+    // Pre-warm the ElevenLabs TCP connection so the first TTS call isn't slow
+    if (elevenLabsKey) {
+      const warmReq = https.request({
+        hostname: 'api.elevenlabs.io', path: '/v1/user', method: 'GET',
+        agent: elevenLabsAgent,
+        headers: { 'xi-api-key': elevenLabsKey },
+      }, r => r.resume());
+      warmReq.on('error', () => {});
+      warmReq.end();
+    }
   });
 }
 
