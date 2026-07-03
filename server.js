@@ -583,6 +583,11 @@ function freshState() {
     paused: false,
     pausedTimerRemaining: null,
     pausedTimerType: null,
+    doubleDown: false,
+    buzzActualOpenAt: null,
+    correctCounts: {},
+    buzzTimes: {},
+    catCorrect: {},
     scoreHistory: [],
     lockedOutIds: [],
     tiebreakerQuestion: null,
@@ -610,6 +615,7 @@ function freshState() {
   };
 }
 
+const disconnectTimers = {};
 const games = new Map();
 let game = freshState();
 game.gameTimer = null;
@@ -665,6 +671,7 @@ function startBuzzTimer() {
   const ms = (game.settings.buzzTime || 30) * 1000;
   game.timerType   = 'buzz';
   game.timerEndsAt = Date.now() + ms;
+  game.buzzActualOpenAt = Date.now();
   game.gameTimer = setTimeout(() => withGame(currentGame, () => {
     if (game.phase === 'tiebreaker' && !game.buzzedPlayerId) { advanceTurn(null); return; }
     if (game.phase === 'question' && !game.buzzedPlayerId) {
@@ -720,7 +727,16 @@ function startAnswerTimer() {
     if (!game.buzzedPlayerId) return;
     const player = game.players.find(p => p.id === game.buzzedPlayerId);
     const points = game.currentQuestion.dailyDouble ? (game.dailyDoubleWager || 0) : game.currentQuestion.value;
-    if (player) { snapshotScores(); player.score -= points; }
+    if (player) {
+      snapshotScores();
+      player.score -= points;
+      player.streak = 0;
+      if (game.settings.teamMode && player.teamId) {
+        const t = game.teams.find(tm => tm.id === player.teamId);
+        if (t) t.streak = 0;
+      }
+    }
+    game.doubleDown = false;
     game.buzzOrder = game.buzzOrder.filter(id => id !== game.buzzedPlayerId);
     if (game.settings.lockoutEnabled) game.lockedOutIds.push(game.buzzedPlayerId);
     game.buzzedPlayerId = game.buzzOrder[0] ?? null;
@@ -779,12 +795,15 @@ function publicState() {
     gameCode: game.code,
     theme: game.theme,
     round: game.round,
-    players: game.players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji || '', score: p.score, isCurrentTurn: p.isCurrentTurn, teamId: p.teamId || null })),
+    players: game.players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji || '', score: p.score, isCurrentTurn: p.isCurrentTurn, teamId: p.teamId || null, streak: p.streak || 0, disconnected: p.disconnectedAt ? true : undefined })),
     currentPlayerIndex: game.currentPlayerIndex,
     categories: game.categories.map(cat => ({
-      name: cat.name,
+      name: cat.locked ? '?????' : cat.name,
       page: cat.page || 1,
-      questions: cat.questions.map(({ value, used, audioUrl }) => ({ value, used, ...(audioUrl ? { audioUrl } : {}) })),
+      locked: cat.locked || false,
+      questions: cat.locked
+        ? cat.questions.map(({ value, used }) => ({ value, used, locked: true }))
+        : cat.questions.map(({ value, used, audioUrl }) => ({ value, used, ...(audioUrl ? { audioUrl } : {}) })),
     })),
     currentPage: game.currentPage || 1,
     pages: game.pages || [{ id: 1, name: 'Page 1' }],
@@ -824,6 +843,7 @@ function publicState() {
     dailyDoublePlayerId: game.dailyDoublePlayerId,
     dailyDoubleCount: game.dailyDoubleCount,
     isStealOpportunity: game.isStealOpportunity,
+    doubleDown: game.doubleDown,
     paused: game.paused,
     scoreHistoryLength: game.scoreHistory.length,
     playerPowerUps: game.settings.powerUpsEnabled ? JSON.parse(JSON.stringify(game.playerPowerUps)) : {},
@@ -835,7 +855,54 @@ function publicState() {
     tiebreakerPlayers: [...game.tiebreakerPlayers],
     settings: { ...game.settings },
     customThemeVars: game.customThemeVars ? { ...game.customThemeVars } : null,
-    teams: game.teams.map(t => ({ id: t.id, name: t.name, score: t.score, memberIds: [...t.memberIds], isCurrentTurn: t.isCurrentTurn || false })),
+    teams: game.teams.map(t => ({ id: t.id, name: t.name, score: t.score, memberIds: [...t.memberIds], isCurrentTurn: t.isCurrentTurn || false, streak: t.streak || 0 })),
+    recap: game.phase === 'game-over' ? computeRecap() : undefined,
+  };
+}
+
+function computeRecap() {
+  // Most correct answers
+  let mostCorrectId = null, mostCorrectCount = 0;
+  for (const [id, count] of Object.entries(game.correctCounts || {})) {
+    if (count > mostCorrectCount) { mostCorrectCount = count; mostCorrectId = id; }
+  }
+  let mostCorrectName = null;
+  if (mostCorrectId) {
+    const p = game.players.find(pl => pl.id === mostCorrectId);
+    mostCorrectName = p ? p.name : null;
+  }
+
+  // Fastest buzz (lowest average buzz-in time)
+  let fastestId = null, fastestAvg = Infinity;
+  for (const [id, times] of Object.entries(game.buzzTimes || {})) {
+    if (!times.length) continue;
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    if (avg < fastestAvg) { fastestAvg = avg; fastestId = id; }
+  }
+  let fastestName = null;
+  if (fastestId) {
+    const p = game.players.find(pl => pl.id === fastestId);
+    fastestName = p ? p.name : null;
+  }
+
+  // Category sweeps (player who got ALL questions in a category)
+  const sweeps = [];
+  for (const [catName, byPlayer] of Object.entries(game.catCorrect || {})) {
+    const cat = game.categories.find(c => c.name === catName);
+    if (!cat) continue;
+    const total = cat.questions.length;
+    for (const [pid, count] of Object.entries(byPlayer)) {
+      if (count >= total) {
+        const p = game.players.find(pl => pl.id === pid);
+        if (p) sweeps.push({ playerName: p.name, catName });
+      }
+    }
+  }
+
+  return {
+    mostCorrect: mostCorrectName ? { name: mostCorrectName, count: mostCorrectCount } : null,
+    fastestBuzz: fastestName ? { name: fastestName, avgMs: Math.round(fastestAvg) } : null,
+    sweeps,
   };
 }
 
@@ -936,6 +1003,7 @@ function advanceTurn(winnerId) {
   clearGameTimer();
   game.buzzOpen   = false;
   game.buzzOpenAt = null;
+  game.buzzActualOpenAt = null;
   game.isStealOpportunity = false;
   game.currentQuestion = null;
   game.buzzedPlayerId = null;
@@ -975,6 +1043,26 @@ function advanceTurn(winnerId) {
     } else {
       game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
     }
+    game.players.forEach((p, i) => { p.isCurrentTurn = i === game.currentPlayerIndex; });
+  }
+  broadcast();
+}
+
+function doStartRound2() {
+  game.categories = JSON.parse(JSON.stringify(game.round2Categories)).map(cat => ({
+    ...cat,
+    questions: cat.questions.map(q => ({ ...q, value: q.value * 2 })),
+  }));
+  game.round2Categories = [];
+  game.round = 2;
+  game.currentPage = game.pages?.[0]?.id || 1;
+  assignDailyDoubles(game.categories, 2);
+  game.phase = 'selecting';
+  if (game.settings.teamMode && game.teams.length > 0) {
+    const curTeamId = game.teams[game.currentPlayerIndex]?.id;
+    game.teams.forEach((t, i) => { t.isCurrentTurn = i === game.currentPlayerIndex; });
+    game.players.forEach(p => { p.isCurrentTurn = p.teamId === curTeamId; });
+  } else {
     game.players.forEach((p, i) => { p.isCurrentTurn = i === game.currentPlayerIndex; });
   }
   broadcast();
@@ -1086,6 +1174,7 @@ const HOST_ONLY_EVENTS = new Set([
   'adjust-team-score', 'set-score', 'set-team-score', 'set-theme', 'set-custom-theme',
   'rematch', 'generate-category-from-source', 'reset-game', 'get-history', 'clear-history',
   'generate-song-category', 'ai-dedupe-delete', 'ai-reword-dupes',
+  'toggle-double-down', 'toggle-category-lock', 'reveal-category', 'advance-round-scores',
 ]);
 
 function isHostSocket(socket) {
@@ -1156,15 +1245,30 @@ io.on('connection', socket => {
     socket.join(`players:${target.code}`);
     withGame(target, () => {
     if (normalizeGameCode(code) !== game.code) { socket.emit('join-error', 'Enter the correct 4-character game code.'); return; }
-    if (game.phase !== 'lobby') { socket.emit('join-error', 'Game already in progress.'); return; }
     const trimmed = (name || '').trim().slice(0, 20);
     if (!trimmed) { socket.emit('join-error', 'Name cannot be empty.'); return; }
+    // Reconnect grace period: restore disconnected player by name
+    const disconnectedPlayer = game.players.find(p => p.disconnectedAt && p.name.toLowerCase() === trimmed.toLowerCase());
+    if (disconnectedPlayer) {
+      const oldId = disconnectedPlayer.id;
+      if (disconnectTimers[oldId]) { clearTimeout(disconnectTimers[oldId]); delete disconnectTimers[oldId]; }
+      disconnectedPlayer.disconnectedAt = undefined;
+      disconnectedPlayer.id = socket.id;
+      if (game.buzzedPlayerId === oldId) game.buzzedPlayerId = socket.id;
+      game.buzzOrder = game.buzzOrder.map(id => id === oldId ? socket.id : id);
+      socket.join('players');
+      socket.emit('joined', { playerId: socket.id, playerName: disconnectedPlayer.name, token: disconnectedPlayer.token });
+      socket.emit('game-state', publicState());
+      broadcast();
+      return;
+    }
+    if (game.phase !== 'lobby') { socket.emit('join-error', 'Game already in progress.'); return; }
     if (game.players.some(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
       socket.emit('join-error', 'That name is already taken.'); return;
     }
     const token = generateToken();
     const safeEmoji = (typeof emoji === 'string' && /^\p{Emoji}/u.test(emoji)) ? emoji.slice(0, 2) : '';
-    game.players.push({ id: socket.id, name: trimmed, emoji: safeEmoji, score: 0, isCurrentTurn: false, token, teamId: null });
+    game.players.push({ id: socket.id, name: trimmed, emoji: safeEmoji, score: 0, streak: 0, isCurrentTurn: false, token, teamId: null });
     socket.join('players');
     socket.emit('joined', { playerId: socket.id, playerName: trimmed, token });
     broadcast();
@@ -1192,7 +1296,7 @@ io.on('connection', socket => {
       if (game.teams.some(t => t.name.toLowerCase() === trimmedName.toLowerCase())) {
         socket.emit('team-error', 'That team name is already taken.'); return;
       }
-      const newTeam = { id: `t${Date.now()}`, name: trimmedName, score: 0, memberIds: [socket.id], isCurrentTurn: false };
+      const newTeam = { id: `t${Date.now()}`, name: trimmedName, score: 0, streak: 0, memberIds: [socket.id], isCurrentTurn: false };
       game.teams.push(newTeam);
       if (player.teamId) {
         const oldTeam = game.teams.find(t => t.id === player.teamId);
@@ -1499,6 +1603,22 @@ JSON format (return exactly this structure, no extra text):
     broadcastLibrary();
   });
 
+  socket.on('toggle-category-lock', ({ catId }) => {
+    if (game.phase !== 'lobby') return;
+    const cat = lib.categories.find(c => c.id === catId);
+    if (!cat) return;
+    cat.locked = !cat.locked;
+    saveLibrary();
+    broadcastLibrary();
+  });
+
+  socket.on('reveal-category', ({ catIdx }) => {
+    const cat = game.categories[catIdx];
+    if (!cat) return;
+    cat.locked = false;
+    broadcast();
+  });
+
   // ── Game controls ─────────────────────────────────────────────────────────
 
   socket.on('remove-player', playerId => {
@@ -1618,23 +1738,22 @@ JSON format (return exactly this structure, no extra text):
 
   socket.on('start-round2', () => {
     if (game.phase !== 'round-over') return;
-    game.categories = JSON.parse(JSON.stringify(game.round2Categories)).map(cat => ({
-      ...cat,
-      questions: cat.questions.map(q => ({ ...q, value: q.value * 2 })),
-    }));
-    game.round2Categories = [];
-    game.round = 2;
-    game.currentPage = game.pages?.[0]?.id || 1;
-    assignDailyDoubles(game.categories, 2);
-    game.phase = 'selecting';
-    if (game.settings.teamMode && game.teams.length > 0) {
-      const curTeamId = game.teams[game.currentPlayerIndex]?.id;
-      game.teams.forEach((t, i) => { t.isCurrentTurn = i === game.currentPlayerIndex; });
-      game.players.forEach(p => { p.isCurrentTurn = p.teamId === curTeamId; });
-    } else {
-      game.players.forEach((p, i) => { p.isCurrentTurn = i === game.currentPlayerIndex; });
-    }
+    const currentGame = game;
+    game.phase = 'round-scores';
     broadcast();
+    // Auto-advance after 8 seconds
+    if (!currentGame._roundScoresTimer) {
+      currentGame._roundScoresTimer = setTimeout(() => withGame(currentGame, () => {
+        if (game.phase === 'round-scores') doStartRound2();
+        currentGame._roundScoresTimer = null;
+      }), 8000);
+    }
+  });
+
+  socket.on('advance-round-scores', () => {
+    if (game.phase !== 'round-scores') return;
+    if (game._roundScoresTimer) { clearTimeout(game._roundScoresTimer); game._roundScoresTimer = null; }
+    doStartRound2();
   });
 
   socket.on('submit-wager', ({ wager }) => {
@@ -1848,6 +1967,11 @@ JSON format (return exactly this structure, no extra text):
     }
     if (game.phase === 'tiebreaker' && !game.tiebreakerPlayers.includes(socket.id)) return;
     game.buzzOrder.push(socket.id);
+    // Record buzz time for recap stats
+    if (game.buzzActualOpenAt) {
+      if (!game.buzzTimes[socket.id]) game.buzzTimes[socket.id] = [];
+      game.buzzTimes[socket.id].push(Date.now() - game.buzzActualOpenAt);
+    }
     if (!game.buzzedPlayerId) { game.buzzedPlayerId = socket.id; startAnswerTimer(); }
     broadcast();
   });
@@ -1871,7 +1995,25 @@ JSON format (return exactly this structure, no extra text):
         effectivePoints = points * 2;
         delete game.activePowerUps[player.id].doubleDown;
       }
+      // Double Down feature multiplier
+      if (game.doubleDown) {
+        effectivePoints = effectivePoints * 2;
+        game.doubleDown = false;
+      }
       if (team) team.score += effectivePoints; else player.score += effectivePoints;
+      // Streak tracking
+      player.streak = (player.streak || 0) + 1;
+      if (team) team.streak = (team.streak || 0) + 1;
+      // Correct count tracking for recap
+      game.correctCounts[player.id] = (game.correctCounts[player.id] || 0) + 1;
+      // Category correct tracking for sweep detection
+      if (game.currentQuestion) {
+        const catName = game.currentQuestion.categoryName;
+        if (catName) {
+          if (!game.catCorrect[catName]) game.catCorrect[catName] = {};
+          game.catCorrect[catName][player.id] = (game.catCorrect[catName][player.id] || 0) + 1;
+        }
+      }
       if (game.phase === 'tiebreaker') { game.phase = 'game-over'; broadcast(); return; }
       advanceTurn(player.id);
     } else {
@@ -1882,6 +2024,10 @@ JSON format (return exactly this structure, no extra text):
       } else {
         if (team) team.score -= points; else player.score -= points;
       }
+      // Reset streak and doubleDown on incorrect
+      player.streak = 0;
+      if (team) team.streak = 0;
+      game.doubleDown = false;
       if (game.settings.lockoutEnabled || game.currentQuestion.dailyDouble || game.phase === 'tiebreaker') {
         if (lockId) game.lockedOutIds.push(lockId);
       }
@@ -2167,6 +2313,11 @@ JSON format (return exactly this structure, no extra text):
     broadcast();
   });
 
+  socket.on('toggle-double-down', () => {
+    game.doubleDown = !game.doubleDown;
+    broadcast();
+  });
+
   socket.on('adjust-score', ({ playerId, delta }) => {
     const player = game.players.find(p => p.id === playerId);
     if (player) { snapshotScores(); player.score += delta; broadcast(); }
@@ -2230,9 +2381,12 @@ JSON format (return exactly this structure, no extra text):
     if (!io.sockets.adapter.rooms.get('host')?.has(socket.id)) return;
     clearLockTimer();
     if (game.gameTimer) { clearTimeout(game.gameTimer); game.gameTimer = null; }
+    if (game._roundScoresTimer) { clearTimeout(game._roundScoresTimer); game._roundScoresTimer = null; }
+    // Clear any disconnect timers
+    Object.keys(disconnectTimers).forEach(id => { clearTimeout(disconnectTimers[id]); delete disconnectTimers[id]; });
     const prevTheme    = game.theme;
-    const prevPlayers  = game.players.map(p => ({ ...p, score: 0, isCurrentTurn: false }));
-    const prevTeams    = game.teams.map(t => ({ ...t, score: 0, isCurrentTurn: false }));
+    const prevPlayers  = game.players.map(p => ({ ...p, score: 0, streak: 0, isCurrentTurn: false, disconnectedAt: undefined }));
+    const prevTeams    = game.teams.map(t => ({ ...t, score: 0, streak: 0, isCurrentTurn: false }));
     const prevSettings = { ...game.settings };
     const fresh = freshState();
     const sameCode = game.code;
@@ -2423,6 +2577,8 @@ JSON format (return exactly this structure, no extra text):
   socket.on('reset-game', () => {
     clearLockTimer();
     if (game.gameTimer) { clearTimeout(game.gameTimer); game.gameTimer = null; }
+    if (game._roundScoresTimer) { clearTimeout(game._roundScoresTimer); game._roundScoresTimer = null; }
+    Object.keys(disconnectTimers).forEach(id => { clearTimeout(disconnectTimers[id]); delete disconnectTimers[id]; });
     const prevTheme = game.theme;
     const sameCode = game.code;
     const fresh = freshState();
@@ -2454,9 +2610,22 @@ JSON format (return exactly this structure, no extra text):
     const target = getGame(socket.data.gameCode);
     if (!target) return;
     withGame(target, () => {
+      const player = game.players.find(p => p.id === socket.id);
+      if (!player) return;
       if (game.phase === 'lobby') {
         game.players = game.players.filter(p => p.id !== socket.id);
         broadcast();
+      } else {
+        // Grace period: mark disconnected, remove after 60s if not reconnected
+        player.disconnectedAt = Date.now();
+        broadcast();
+        const currentGame = game;
+        const socketId = socket.id;
+        disconnectTimers[socketId] = setTimeout(() => withGame(currentGame, () => {
+          game.players = game.players.filter(p => p.id !== socketId);
+          delete disconnectTimers[socketId];
+          broadcast();
+        }), 60000);
       }
     });
   });

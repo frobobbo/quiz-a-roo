@@ -607,6 +607,7 @@
 <div id="buzz-screen" class="screen">
   <div class="score-chip">
     <span id="buz-name">Player</span> &nbsp;|&nbsp; <span class="amt" id="buz-score">$0</span>
+    <span id="streak-indicator" style="display:none;margin-left:10px;font-size:0.9em">🔥 <span id="streak-count"></span></span>
   </div>
   <div>
     <div id="q-cat-label"></div>
@@ -863,12 +864,14 @@
         }
         break;
 
-      case 'round-over': {
+      case 'round-over':
+      case 'round-scores': {
         const isTeamRO = state.settings?.teamMode && state.teams?.length;
         const sortedRO = isTeamRO
           ? [...state.teams].sort((a, b) => b.score - a.score)
           : [...state.players].sort((a, b) => b.score - a.score);
         const myKeyRO = isTeamRO ? player.teamId : myId;
+        document.getElementById('round-over-msg').textContent = state.phase === 'round-scores' ? 'Round 1 Scores' : 'Get ready for Round 2…';
         document.getElementById('round-over-scores').innerHTML = sortedRO.map((item, i) => `
           <div class="go-row${item.id === myKeyRO ? ' me' : ''}">
             <span style="width:28px;text-align:center">${i === 0 ? '🏆' : '#' + (i+1)}</span>
@@ -1197,6 +1200,16 @@
   function renderBuzzScreen(player) {
     setText('buz-name', state.settings?.teamMode ? (myTeam()?.name ?? player.name) : player.name);
     setText('buz-score', fmt(myScore()));
+    // Streak indicator
+    const streakVal = state.settings?.teamMode ? (myTeam()?.streak || 0) : (player.streak || 0);
+    const streakEl = document.getElementById('streak-indicator');
+    const streakCountEl = document.getElementById('streak-count');
+    if (streakVal >= 2) {
+      streakEl.style.display = 'inline';
+      streakCountEl.textContent = streakVal;
+    } else {
+      streakEl.style.display = 'none';
+    }
 
     const q = state.currentQuestion;
     setText('q-cat-label', q ? `${q.categoryName}  —  $${q.value}` : '');
