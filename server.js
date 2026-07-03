@@ -1273,10 +1273,14 @@ io.on('connection', socket => {
     }
     const n = Math.min(Math.max(parseInt(count) || 3, 1), 8);
     const themeStr = theme ? ` themed around: "${theme.trim()}"` : '';
+    const seed = Math.floor(Math.random() * 1000000);
+    const domains = ['pop culture','science','wordplay','history','geography','sports','food & drink','music','literature','movies','TV','art','mythology','animals','technology','language','fashion','architecture','politics','games'];
+    const picks = domains.sort(() => Math.random() - 0.5).slice(0, 4).join(', ');
     try {
       const msg = await anthropic.messages.create({
         model: 'claude-opus-4-8',
         max_tokens: 6000,
+        temperature: 1,
         system: `You are an expert Jeopardy! question writer with decades of experience.
 Create original, clever categories with accurate, well-crafted clues.
 Categories should be specific and interesting (e.g. "THINGS WITH HOLES" or "BEFORE & AFTER"), not generic (e.g. "HISTORY").
@@ -1285,7 +1289,8 @@ Questions should escalate in difficulty: $200 is easy, $1000 is very challenging
 Return ONLY valid JSON with no markdown, code fences, or explanation.`,
         messages: [{
           role: 'user',
-          content: `Generate ${n} distinct Jeopardy!-style trivia categories${themeStr}.
+          content: `[Randomness seed: ${seed}] Generate ${n} distinct Jeopardy!-style trivia categories${themeStr}.
+${!theme ? `Draw from varied domains — consider mixing some of these this time: ${picks}. Be unexpected and specific; avoid the most obvious topics.` : ''}
 For each category provide exactly 5 questions at values $200, $400, $600, $800, $1000.
 Return this exact JSON structure:
 {"categories":[{"name":"CATEGORY NAME","questions":[{"value":200,"question":"clue text","answer":"answer text"},{"value":400,"question":"clue text","answer":"answer text"},{"value":600,"question":"clue text","answer":"answer text"},{"value":800,"question":"clue text","answer":"answer text"},{"value":1000,"question":"clue text","answer":"answer text"}]}]}`
@@ -1745,6 +1750,15 @@ JSON format (return exactly this structure, no extra text):
     game.buzzOrder = [];
     game.buzzOpen   = false;
     game.buzzOpenAt = null;
+
+    // Audio-only question (song category): skip TTS lockout, let players respond during the clip
+    if (game.currentQuestion.audioUrl && !game.currentQuestion.question) {
+      game.timerType = null;
+      if (!game.settings.allPlayMode) game.buzzOpen = true;
+      startBuzzTimer();
+      broadcast();
+      return;
+    }
 
     const ttsActive = !!(appSettings.tts?.enabled && elevenLabsKey);
 

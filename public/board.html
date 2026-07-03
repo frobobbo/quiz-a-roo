@@ -917,7 +917,8 @@
 
     // TTS narration
     if (state.ttsEnabled && state.currentQuestion &&
-        (state.phase === 'question' || state.phase === 'tiebreaker')) {
+        (state.phase === 'question' || state.phase === 'tiebreaker') &&
+        !(state.currentQuestion.audioUrl && !state.currentQuestion.question)) {
       speakQuestion(state.currentQuestion);
     }
 
