@@ -559,6 +559,7 @@
         <button class="btn btn-gray" id="skip-btn" style="display:none">Skip Question</button>
         <button class="btn btn-gold" id="continue-btn" style="display:none">Continue →</button>
         <button class="btn btn-gray" id="pause-btn" style="display:none">⏸ Pause</button>
+        <button class="btn btn-gray" id="double-down-btn" style="display:none" title="Next correct answer scores double">2× Double Down</button>
         <button class="btn btn-gray" id="undo-btn" style="display:none;opacity:.5" title="Undo last score change">↩ Undo Score</button>
         <button class="btn btn-gold" id="rematch-btn" style="display:none">🔄 Rematch</button>
         <button class="btn btn-gray" id="reset-btn">Reset Game</button>
@@ -667,9 +668,10 @@
       <!-- Round over (between rounds) -->
       <div id="round-over-section">
         <div class="phase-card">
-          <h2>ROUND 1 COMPLETE</h2>
-          <p>Round 2 is ready. Start when players are set.</p>
+          <h2 id="round-over-heading">ROUND 1 COMPLETE</h2>
+          <p id="round-over-subtext">Round 2 is ready. Start when players are set.</p>
           <button class="btn btn-gold" id="start-round2-btn" style="font-size:15px;padding:13px 28px">START ROUND 2 →</button>
+          <button class="btn btn-outline" id="advance-round-scores-btn" style="font-size:15px;padding:13px 28px;display:none">Continue → (Skip Scoreboard)</button>
         </div>
         <div class="section-title" style="margin-bottom:8px">Scores After Round 1</div>
         <div id="round-over-scores"></div>
@@ -1011,12 +1013,16 @@
         if (e.key === 'Escape') closeGenCatsModal();
       });
     } else {
+      const THEME_PRESETS = ['90s Hip Hop','Movie Soundtracks','Classic Rock','Science & Nature','World History','Sports Legends','Food & Drink','90s TV Shows','Video Games','Dad Jokes'];
       dlg.innerHTML = `
         <h2>✨ Generate Categories</h2>
         ${genTabsHtml()}
         <div>
           <div class="gen-cats-label">Theme <span style="opacity:.5">(optional)</span></div>
           <input id="gen-cats-theme-input" type="text" placeholder="e.g. 80s movies, science, world geography…" maxlength="100" autocomplete="off">
+          <div id="theme-presets" style="display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding:8px 0 2px;scrollbar-width:thin">
+            ${THEME_PRESETS.map(p => `<button class="theme-preset-chip" data-theme="${esc(p)}" style="flex-shrink:0;padding:4px 10px;border-radius:16px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.07);color:rgba(255,255,255,.75);font-size:12px;cursor:pointer;white-space:nowrap">${esc(p)}</button>`).join('')}
+          </div>
         </div>
         <div>
           <div class="gen-cats-label">How many categories?</div>
@@ -1035,6 +1041,11 @@
         btn.addEventListener('click', () => {
           genCatsCount = +btn.dataset.n;
           dlg.querySelectorAll('.gen-cats-count-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+      dlg.querySelectorAll('.theme-preset-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.getElementById('gen-cats-theme-input').value = chip.dataset.theme;
         });
       });
       document.getElementById('gen-cats-cancel-btn').addEventListener('click', closeGenCatsModal);
@@ -1314,13 +1325,18 @@
     pauseBtn.style.display = inQuestion ? 'inline-flex' : 'none';
     pauseBtn.textContent   = gameState.paused ? '▶ Resume' : '⏸ Pause';
     pauseBtn.style.background = gameState.paused ? '#1a5c1a' : '';
+    const ddBtn = document.getElementById('double-down-btn');
+    ddBtn.style.display = inGame && phase !== 'game-over' && phase !== 'lobby' ? 'inline-flex' : 'none';
+    ddBtn.textContent = gameState.doubleDown ? '2× ON (click to cancel)' : '2× Double Down';
+    ddBtn.style.background = gameState.doubleDown ? '#c09a38' : '';
+    ddBtn.style.color = gameState.doubleDown ? '#000' : '';
     const undoBtn = document.getElementById('undo-btn');
     undoBtn.style.display  = inGame ? 'inline-flex' : 'none';
     undoBtn.style.opacity  = (gameState.scoreHistoryLength ?? 0) > 0 ? '1' : '0.35';
     undoBtn.disabled       = (gameState.scoreHistoryLength ?? 0) === 0;
     document.getElementById('rematch-btn').style.display = phase === 'game-over' ? 'inline-flex' : 'none';
 
-    document.getElementById('round-over-section').style.display      = phase === 'round-over'      ? 'block' : 'none';
+    document.getElementById('round-over-section').style.display      = (phase === 'round-over' || phase === 'round-scores') ? 'block' : 'none';
     document.getElementById('final-wager-section').style.display     = phase === 'final-wager'     ? 'block' : 'none';
     document.getElementById('final-question-section').style.display  = phase === 'final-question'  ? 'block' : 'none';
     document.getElementById('daily-double-section').style.display    = phase === 'daily-double'    ? 'block' : 'none';
@@ -1365,7 +1381,7 @@
       hSyncTimer();
     }
 
-    if (phase === 'round-over')      renderRoundOver();
+    if (phase === 'round-over' || phase === 'round-scores') renderRoundOver();
     if (phase === 'final-wager')     renderFinalWager();
     if (phase === 'final-question')  renderFinalQuestion();
     if (phase === 'daily-double')    renderDailyDouble();
@@ -1375,6 +1391,13 @@
   }
 
   function renderRoundOver() {
+    const phase = gameState.phase;
+    const isRoundScores = phase === 'round-scores';
+    // Show correct buttons for each phase
+    document.getElementById('start-round2-btn').style.display = isRoundScores ? 'none' : 'inline-flex';
+    document.getElementById('advance-round-scores-btn').style.display = isRoundScores ? 'inline-flex' : 'none';
+    document.getElementById('round-over-heading').textContent = isRoundScores ? 'SCOREBOARD SHOWING…' : 'ROUND 1 COMPLETE';
+    document.getElementById('round-over-subtext').textContent = isRoundScores ? 'Players see scoreboard. Auto-advances in ~8s.' : 'Round 2 is ready. Start when players are set.';
     const scores = document.getElementById('round-over-scores');
     const isTeam = gameState.settings?.teamMode && gameState.teams?.length;
     const items = isTeam ? gameState.teams : gameState.players;
@@ -1422,6 +1445,12 @@
     const grid = document.getElementById('host-pick-grid');
     grid.innerHTML = cats.map(cat => {
       const globalCi = gameState.categories.indexOf(cat);
+      if (cat.locked) {
+        return `<div class="host-pick-row" style="grid-template-columns:120px 1fr">
+          <span class="host-pick-cat" title="${esc(cat.name)}" style="opacity:.4">?????</span>
+          <button class="btn btn-sm btn-outline reveal-cat-btn" data-ci="${globalCi}" style="font-size:11px">🔓 REVEAL</button>
+        </div>`;
+      }
       const cells = cat.questions.map((q, qi) =>
         `<button class="host-pick-btn${q.used ? ' used' : ''}"
            data-ci="${globalCi}" data-qi="${qi}">$${q.value}</button>`
@@ -1438,6 +1467,11 @@
           categoryIndex: +btn.dataset.ci,
           questionIndex: +btn.dataset.qi,
         });
+      });
+    });
+    grid.querySelectorAll('.reveal-cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        socket.emit('reveal-category', { catIdx: +btn.dataset.ci });
       });
     });
   }
@@ -1846,6 +1880,7 @@
         <button class="btn-icon expand-btn" data-id="${cat.id}" title="Edit questions">
           <span class="chevron ${isOpen ? 'open' : ''}">▶</span>
         </button>
+        <button class="btn-icon lock-cat-btn" data-id="${cat.id}" title="${cat.locked ? 'Unlock category (show to players)' : 'Lock category (hide from players)'}">${cat.locked ? '🔒' : '🔓'}</button>
         <button class="btn-icon gen-btn" data-id="${cat.id}" title="Generate questions with AI">✨</button>
         <button class="btn-icon csv-btn" data-id="${cat.id}" title="Import questions from CSV">📋</button>
         <button class="btn-icon dup-btn" data-id="${cat.id}" title="Duplicate category">⧉</button>
@@ -1943,6 +1978,11 @@
     // Duplicate category
     card.querySelector('.dup-btn').addEventListener('click', () => {
       socket.emit('duplicate-category', { id: cat.id });
+    });
+
+    // Lock/unlock category (hide from players pre-game)
+    card.querySelector('.lock-cat-btn').addEventListener('click', () => {
+      socket.emit('toggle-category-lock', { catId: cat.id });
     });
 
     // CSV import
@@ -2104,6 +2144,8 @@
   document.getElementById('skip-btn').addEventListener('click', () => socket.emit('skip-question'));
   document.getElementById('continue-btn').addEventListener('click', () => socket.emit('dismiss-answer-reveal'));
   document.getElementById('pause-btn').addEventListener('click', () => socket.emit('toggle-pause'));
+  document.getElementById('double-down-btn').addEventListener('click', () => socket.emit('toggle-double-down'));
+  document.getElementById('advance-round-scores-btn').addEventListener('click', () => socket.emit('advance-round-scores'));
   document.getElementById('undo-btn').addEventListener('click', () => socket.emit('undo-last-score'));
   document.getElementById('rematch-btn').addEventListener('click', () => {
     if (confirm('Start a rematch with the same players? Scores reset to 0.')) socket.emit('rematch');

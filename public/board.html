@@ -160,6 +160,7 @@
       border-color: var(--gold);
       box-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
     }
+    .score-card.disconnected { opacity: 0.4; filter: grayscale(0.8); }
 
     .score-name { font-size: clamp(12px, 1.5vw, 18px); text-transform: uppercase; letter-spacing: 1px; }
     .score-value { font-size: clamp(16px, 2vw, 26px); color: var(--gold); font-family: Impact, sans-serif; }
@@ -575,6 +576,74 @@
     .fj-wager-chip .chip-dot  { font-size: 1.2em; }
     .fj-wager-chip.wagered .chip-dot { color: #5acc80; }
     .fj-wager-chip.waiting .chip-dot  { color: rgba(255,255,255,.25); }
+
+    /* ── LOCKED TILES ── */
+    .cat-header.locked { color: rgba(255,255,255,.3); letter-spacing: 3px; }
+    .q-tile.locked { color: rgba(255,255,255,.2); font-size: clamp(16px,2vw,30px); }
+
+    /* ── DOUBLE DOWN BADGE ── */
+    .dd-badge { display:inline-block;background:#ff8c00;color:#000;border-radius:6px;font-size:0.55em;padding:2px 8px;margin-left:10px;vertical-align:middle;letter-spacing:1px;font-family:Impact,sans-serif; }
+
+    /* ── PODIUM OVERLAY ── */
+    #podium-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: #020719;
+      z-index: 400;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 0;
+      padding-bottom: 0;
+      overflow: hidden;
+    }
+    .podium-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      width: 28vw;
+      max-width: 280px;
+    }
+    .podium-name {
+      font-family: Impact, sans-serif;
+      font-size: clamp(18px, 2.5vw, 32px);
+      letter-spacing: 2px;
+      color: var(--white);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .podium-medal { font-size: clamp(28px, 4vw, 56px); margin-bottom: 8px; }
+    .podium-score { font-family: Impact, sans-serif; font-size: clamp(14px, 2vw, 24px); color: var(--gold); margin-bottom: 10px; }
+    .podium-block {
+      width: 100%;
+      border-radius: 6px 6px 0 0;
+      transform: translateY(100%);
+      transition: transform 0.7s cubic-bezier(.2,1.2,.4,1);
+    }
+    .podium-block.p1 { background: #c9a227; height: 38vh; }
+    .podium-block.p2 { background: #8a8a8a; height: 28vh; }
+    .podium-block.p3 { background: #7b4a1e; height: 20vh; }
+    .podium-block.slide-up { transform: translateY(0); }
+
+    /* ── RECAP PANEL ── */
+    #recap-panel {
+      margin-top: 20px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .recap-chip {
+      background: var(--dark);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: clamp(13px, 1.5vw, 18px);
+      text-align: center;
+      min-width: 160px;
+    }
+    .recap-chip .recap-label { opacity: .6; font-size: .75em; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+    .recap-chip .recap-val { color: var(--gold); font-family: Impact, sans-serif; font-size: 1.15em; }
   </style>
 </head>
 <body>
@@ -637,7 +706,11 @@
 <div id="gameover">
   <div id="gameover-title" style="font-family:Impact,sans-serif;font-size:clamp(28px,5vw,60px);letter-spacing:4px;color:var(--gold);animation:go-title-in 0.7s cubic-bezier(.2,1.3,.4,1) forwards"></div>
   <div id="final-scores"></div>
+  <div id="recap-panel"></div>
 </div>
+
+<!-- PODIUM OVERLAY -->
+<div id="podium-overlay"></div>
 
 <!-- PAUSE BANNER -->
 <div id="pause-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);padding:14px;text-align:center;font-family:Impact,sans-serif;font-size:clamp(22px,3vw,40px);letter-spacing:4px;color:#fff;animation:pause-slide 0.3s ease-out">⏸ PAUSED</div>
@@ -720,6 +793,7 @@
   let prevBuzzId = null;
   let prevPhase = null;
   let prevRound = null;
+  let podiumShown = false;
   let announcedWelcomeForCode = null;
   const announcedRounds = new Set();
   let prevDDCount = 0;
@@ -907,7 +981,7 @@
         // Capture tile position while board is still rendered
         ddStartRect = captureDDTileRect();
       }
-      else if (state.phase === 'round-over') playRoundOver();
+      else if (state.phase === 'round-over' || state.phase === 'round-scores') playRoundOver();
       else if (state.phase === 'game-over') playGameOver();
       else if (state.phase === 'final-question' && prevPhase === 'final-wager') playFinalJeopardy();
       if (state.phase !== 'question' && state.phase !== 'tiebreaker') stopTTS();
@@ -931,14 +1005,17 @@
 
     hide('lobby'); hide('game'); hide('overlay'); hide('gameover');
     hide('round-over'); hide('final');
+    // Only hide podium-overlay outside game-over (it manages itself during game-over animation)
+    if (state.phase !== 'game-over') hide('podium-overlay');
     if (state.phase !== 'daily-double') hide('daily-double-overlay');
 
     if (state.phase === 'lobby') {
       confettiLaunched = false;
+      podiumShown = false;
       renderLobby();
     } else if (state.phase === 'game-over') {
       renderGameOver();
-    } else if (state.phase === 'round-over') {
+    } else if (state.phase === 'round-over' || state.phase === 'round-scores') {
       renderRoundOver();
     } else if (state.phase === 'final-wager' || state.phase === 'final-question') {
       renderFinal();
@@ -981,19 +1058,24 @@
     if (state.settings?.teamMode && state.teams?.length) {
       document.getElementById('scores').innerHTML = state.teams.map(t => {
         const members = state.players.filter(p => p.teamId === t.id).map(p => p.name).join(' · ');
+        const streakBadge = (t.streak >= 2) ? ' 🔥' : '';
         return `<div class="score-card ${t.isCurrentTurn ? 'active' : ''}">
-          <div class="score-name">${esc(t.name)}</div>
+          <div class="score-name">${esc(t.name)}${streakBadge}</div>
           ${members ? `<div style="font-size:clamp(9px,1vw,13px);opacity:.55;margin:-2px 0 2px">${esc(members)}</div>` : ''}
           <div class="score-value">${fmt(t.score)}</div>
         </div>`;
       }).join('');
     } else {
-      document.getElementById('scores').innerHTML = state.players.map(p => `
-        <div class="score-card ${p.isCurrentTurn ? 'active' : ''}">
-          <div class="score-name">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}</div>
+      document.getElementById('scores').innerHTML = state.players.map(p => {
+        const streakBadge = (p.streak >= 2) ? ' 🔥' : '';
+        const classes = ['score-card', p.isCurrentTurn ? 'active' : '', p.disconnected ? 'disconnected' : ''].filter(Boolean).join(' ');
+        return `
+        <div class="${classes}">
+          <div class="score-name">${p.emoji ? p.emoji + ' ' : ''}${esc(p.name)}${streakBadge}</div>
           <div class="score-value">${fmt(p.score)}</div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     // Grid — filter to current page
@@ -1023,7 +1105,7 @@
 
       pageCats.forEach(cat => {
         const el = document.createElement('div');
-        el.className = 'cat-header';
+        el.className = cat.locked ? 'cat-header locked' : 'cat-header';
         el.textContent = cat.name;
         grid.appendChild(el);
       });
@@ -1032,8 +1114,13 @@
         pageCats.forEach(cat => {
           const q = cat.questions[row];
           const el = document.createElement('div');
-          el.className = `q-tile${q.used ? ' used' : ''}`;
-          el.innerHTML = q.used ? '' : `$${q.value}${q.audioUrl ? '<span class="tile-music">🎵</span>' : ''}`;
+          if (q.locked) {
+            el.className = 'q-tile locked';
+            el.textContent = '?';
+          } else {
+            el.className = `q-tile${q.used ? ' used' : ''}`;
+            el.innerHTML = q.used ? '' : `$${q.value}${q.audioUrl ? '<span class="tile-music">🎵</span>' : ''}`;
+          }
           grid.appendChild(el);
         });
       }
@@ -1045,9 +1132,15 @@
         pageCats.forEach(cat => {
           const q = cat.questions[row];
           const el = tiles[i++];
-          const used = q.used;
-          el.classList.toggle('used', used);
-          el.innerHTML = used ? '' : `$${q.value}${q.audioUrl ? '<span class="tile-music">🎵</span>' : ''}`;
+          if (q.locked) {
+            el.className = 'q-tile locked';
+            el.textContent = '?';
+          } else {
+            const used = q.used;
+            el.classList.toggle('used', used);
+            el.classList.remove('locked');
+            el.innerHTML = used ? '' : `$${q.value}${q.audioUrl ? '<span class="tile-music">🎵</span>' : ''}`;
+          }
         });
       }
     }
@@ -1163,10 +1256,11 @@
     const q = state.currentQuestion;
     const isReveal = state.phase === 'answer-reveal';
     const isTie = state.phase === 'tiebreaker';
-    const header = isTie
-      ? `🔥 TIEBREAKER — ${q.categoryName}`
-      : `${q.categoryName}  —  ${q.dailyDouble ? 'DAILY DOUBLE' : '$' + q.value}`;
-    document.getElementById('q-header').textContent = header;
+    const headerText = isTie
+      ? `🔥 TIEBREAKER — ${esc(q.categoryName)}`
+      : `${esc(q.categoryName)}  —  ${q.dailyDouble ? 'DAILY DOUBLE' : '$' + q.value}`;
+    const ddBadge = state.doubleDown ? '<span class="dd-badge">2× DOUBLE DOWN</span>' : '';
+    document.getElementById('q-header').innerHTML = headerText + ddBadge;
 
     // Audio player
     const audioPlayerEl = document.getElementById('q-audio-player');
@@ -1243,7 +1337,55 @@
     setTimeout(() => { container.innerHTML = ''; confettiLaunched = false; }, 6000);
   }
 
+  function renderPodium(sorted, isTeam) {
+    const overlay = document.getElementById('podium-overlay');
+    overlay.innerHTML = '';
+    overlay.style.display = 'flex';
+    const medals = ['🥇', '🥈', '🥉'];
+    const blockClass = ['p1', 'p2', 'p3'];
+    // Show slots in display order: 2nd, 1st, 3rd (classic podium layout)
+    const displayOrder = [1, 0, 2];
+    displayOrder.forEach(idx => {
+      const item = sorted[idx];
+      if (!item) return;
+      const slot = document.createElement('div');
+      slot.className = 'podium-slot';
+      slot.innerHTML = `
+        <div class="podium-medal">${medals[idx] || ''}</div>
+        <div class="podium-name">${esc(item.name)}</div>
+        <div class="podium-score">${fmt(item.score)}</div>
+        <div class="podium-block ${blockClass[idx] || ''}"></div>
+      `;
+      overlay.appendChild(slot);
+    });
+    // Animate blocks up in reverse order: 3rd → 2nd → 1st
+    const animOrder = [2, 1, 0];
+    animOrder.forEach((rankIdx, delay) => {
+      const blockIdx = displayOrder.indexOf(rankIdx);
+      if (blockIdx === -1) return;
+      const block = overlay.querySelectorAll('.podium-block')[blockIdx];
+      if (block) setTimeout(() => block.classList.add('slide-up'), delay * 500 + 300);
+    });
+    // After ~4s, hide podium and show gameover
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      document.getElementById('gameover').style.display = 'flex';
+    }, 4500);
+  }
+
   function renderGameOver() {
+    if (!podiumShown) {
+      podiumShown = true;
+      // Hide gameover while podium plays
+      document.getElementById('gameover').style.display = 'none';
+      const isTeam = state.settings?.teamMode && state.teams?.length;
+      const sorted = isTeam
+        ? [...state.teams].sort((a, b) => b.score - a.score)
+        : [...state.players].sort((a, b) => b.score - a.score);
+      renderPodium(sorted, isTeam);
+      // Gameover will be shown after podium timeout
+      return;
+    }
     show('gameover');
     if (!confettiLaunched) { confettiLaunched = true; launchConfetti(); }
     const isTeam = state.settings?.teamMode && state.teams?.length;
@@ -1268,21 +1410,43 @@
         </div>
       `;
     }).join('');
+    // Recap panel
+    const recap = state.recap;
+    const recapEl = document.getElementById('recap-panel');
+    if (recap) {
+      const chips = [];
+      if (recap.mostCorrect) chips.push(`<div class="recap-chip"><div class="recap-label">Most Correct</div><div class="recap-val">${esc(recap.mostCorrect.name)} (${recap.mostCorrect.count})</div></div>`);
+      if (recap.fastestBuzz) chips.push(`<div class="recap-chip"><div class="recap-label">Fastest Buzz</div><div class="recap-val">${esc(recap.fastestBuzz.name)} (${recap.fastestBuzz.avgMs}ms avg)</div></div>`);
+      if (recap.sweeps?.length) recap.sweeps.forEach(s => chips.push(`<div class="recap-chip"><div class="recap-label">Category Sweep</div><div class="recap-val">${esc(s.playerName)}<br><span style="font-size:.8em;opacity:.7">${esc(s.catName)}</span></div></div>`));
+      recapEl.innerHTML = chips.join('');
+      recapEl.style.display = chips.length ? 'flex' : 'none';
+    } else {
+      recapEl.style.display = 'none';
+    }
   }
 
   function renderRoundOver() {
     show('round-over');
+    const isRoundScores = state.phase === 'round-scores';
+    document.querySelector('#round-over h2').textContent = isRoundScores ? 'ROUND 1 SCORES' : 'ROUND 1 COMPLETE';
+    document.querySelector('#round-over .round-tagline').textContent = isRoundScores ? 'Get ready for Round 2!' : 'Get ready for Round 2!';
     const isTeam = state.settings?.teamMode && state.teams?.length;
     const sorted = isTeam
       ? [...state.teams].sort((a, b) => b.score - a.score)
       : [...state.players].sort((a, b) => b.score - a.score);
-    document.getElementById('round-over-scores').innerHTML = sorted.map((item, i) => `
-      <div class="final-row ${i === 0 ? 'winner' : ''}">
-        <span class="final-rank">${i === 0 ? '1st' : `#${i+1}`}</span>
+    const total = sorted.length;
+    document.getElementById('round-over-scores').innerHTML = sorted.map((item, i) => {
+      const delay = isRoundScores ? (total - 1 - i) * 380 : 0;
+      const animStyle = isRoundScores ? `animation:score-reveal 0.45s ease ${delay}ms forwards` : '';
+      const rowClass = isRoundScores ? `final-row ${i === 0 ? 'winner' : ''}` : `final-row ${i === 0 ? 'winner' : ''}`;
+      return `
+      <div class="${rowClass}" style="${animStyle}">
+        <span class="final-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</span>
         <span class="final-name">${esc(item.name)}</span>
         <span class="final-amt">${fmt(item.score)}</span>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   function renderFinal() {
